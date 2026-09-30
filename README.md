@@ -35,21 +35,21 @@
 1. Python 3.9 이상을 설치합니다. 설치 화면에서 **Add python.exe to PATH**를 체크하세요.
 2. 저장소를 받습니다.
    ```bash
-   git clone https://github.com/<계정>/beep-labeler.git
+   git clone https://github.com/seongmin0531/Sound-Labeler.git
    ```
-3. `beep-labeler` 폴더에서 **`run_windows.bat`을 더블클릭**합니다. 처음 한 번만 자동 설치되고,
+3. `Sound-Labeler` 폴더에서 **`run_windows.bat`을 더블클릭**합니다. 처음 한 번만 자동 설치되고,
    브라우저가 열립니다.
 
 ### macOS / Linux
 ```bash
-git clone https://github.com/<계정>/beep-labeler.git
-cd beep-labeler
+git clone https://github.com/seongmin0531/Sound-Labeler.git
+cd Sound-Labeler
 ./run.sh
 ```
 
 ### pip로 직접
 ```bash
-pip install git+https://github.com/<계정>/beep-labeler.git
+pip install git+https://github.com/seongmin0531/Sound-Labeler.git
 beeplabel serve
 ```
 
