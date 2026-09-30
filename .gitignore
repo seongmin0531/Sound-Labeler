@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+demo_data/
+demo_state/
+beeplabel_data/
+*.db
+*.db-wal
+*.db-shm

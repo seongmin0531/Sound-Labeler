@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "beeplabel"
+version = "0.2.0"
+description = "Multi-user vehicle beep region labeling (100 ms grid) with audit log and Excel export"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = [
+    "numpy>=1.22",
+    "soundfile>=0.12",
+    "fastapi>=0.100",
+    "uvicorn>=0.22",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "httpx>=0.24"]
+
+[project.scripts]
+beeplabel = "beeplabel.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+beeplabel = ["static/*"]
