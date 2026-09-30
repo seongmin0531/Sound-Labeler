@@ -73,15 +73,14 @@ class App:
 
     # ---------- automatic suggestion ----------
     def auto_region(self, rel: str) -> dict:
-        """Detector's suggested region (cached in the DB per file content + config)."""
+        """Detector's suggested region (first beep onset, <= 100 ms), cached per file content."""
         sha, digest = self.sha256(rel), self.config.digest()
         cached = self.db.get_auto(self.dataset_key, rel, sha, digest)
         if cached:
             return cached
         data, sr = self.load(rel)
         events, _ = detect(to_mono(data), sr, self.config.detector)
-        b = self.bounds(rel)
-        s, e = regions.suggest(events, b)
-        ss, es = regions.seconds(b, sr, s, e)
+        s, e = regions.suggest(events, len(data), sr)
+        ss, es = regions.seconds(sr, s, e)
         self.db.put_auto(self.dataset_key, rel, sha, digest, s, e, ss, es)
-        return {"start_frame": s, "end_frame": e, "start_s": ss, "end_s": es}
+        return {"start_sample": s, "end_sample": e, "start_s": ss, "end_s": es}

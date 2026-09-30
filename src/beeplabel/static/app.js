@@ -1,7 +1,8 @@
 "use strict";
-// Beep Labeler front-end: one beep region per file, snapped to the 100 ms frame grid.
-// Region = [s, e) in frame indices, or null (= no beep). Every change is saved under the
-// logged-in user id and recorded in the server-side audit log.
+// Beep Labeler front-end: one beep region per file, 0 < length <= 100 ms, free position.
+// Region = [s, e) in sample indices, or null (= no beep). Drag = span up to 100 ms,
+// click = 100 ms window centred on the click. Every change is saved under the logged-in
+// user id and recorded in the server-side audit log.
 
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -45,40 +46,40 @@ function readColors() {
 }
 readColors();
 
-// ================= login =================
-let registerMode = false;
+// ================= login (id only) =================
 async function showLogin() {
   $("app-view").hidden = true; $("login-view").hidden = false;
   $("audio").pause();
   const p = await fetch("/api/public").then((r) => r.json()).catch(() => ({}));
   $("login-version").textContent = p.version ? "v" + p.version : "";
-  $("tab-register").hidden = p.has_users && !p.allow_register;
-  setRegisterMode(!p.has_users);
-  $("lg-hint").textContent = p.has_users ? "" : "첫 번째로 가입하는 계정이 관리자가 됩니다.";
+  const users = p.users || [];
+  $("lg-users-wrap").hidden = !users.length;
+  $("lg-users").innerHTML = "";
+  for (const u of users) {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = u;
+    b.onclick = () => { $("lg-id").value = u; doLogin(false); };
+    $("lg-users").appendChild(b);
+  }
+  resetNewId();
   $("lg-id").focus();
 }
-function setRegisterMode(on) {
-  registerMode = on;
-  $("tab-login").classList.toggle("active", !on); $("tab-register").classList.toggle("active", on);
-  $("lg-name-row").hidden = !on;
-  $("lg-submit").textContent = on ? "가입하고 시작" : "로그인";
-  $("lg-pw").autocomplete = on ? "new-password" : "current-password";
+function resetNewId() { $("lg-new").hidden = true; $("lg-submit").textContent = "로그인"; $("lg-error").textContent = ""; }
+$("lg-id").oninput = resetNewId;
+async function doLogin(create) {
   $("lg-error").textContent = "";
-}
-$("tab-login").onclick = () => setRegisterMode(false);
-$("tab-register").onclick = () => setRegisterMode(true);
-$("login-form").onsubmit = async (ev) => {
-  ev.preventDefault();
-  $("lg-error").textContent = "";
+  const id = $("lg-id").value.trim();
   try {
-    await api(registerMode ? "/api/auth/register" : "/api/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ user_id: $("lg-id").value.trim(), password: $("lg-pw").value, display_name: $("lg-name").value.trim() }),
-    });
-    $("lg-pw").value = "";
+    await api("/api/auth/login", { method: "POST", body: JSON.stringify({ user_id: id, create, display_name: $("lg-name").value.trim() }) });
+    $("lg-name").value = "";
     await startApp();
-  } catch (e) { $("lg-error").textContent = e.message; }
-};
+  } catch (e) {
+    if (e.message.startsWith("처음 보는")) {
+      $("lg-new-id").textContent = id; $("lg-new").hidden = false;
+      $("lg-submit").textContent = "새 아이디로 시작"; $("lg-name").focus();
+    } else $("lg-error").textContent = e.message;
+  }
+}
+$("login-form").onsubmit = (ev) => { ev.preventDefault(); doLogin(!$("lg-new").hidden); };
 
 async function logout() {
   await flushSave();
@@ -95,7 +96,7 @@ async function startApp() {
   $("login-view").hidden = true; $("app-view").hidden = false;
   applyTheme(S.me.theme || "dark");
   $("version").textContent = "v" + m.version;
-  $("who").textContent = `${S.me.display_name} (${S.me.id})${S.me.is_admin ? " · 관리자" : ""}`;
+  $("who").textContent = S.me.display_name === S.me.id ? S.me.id : `${S.me.display_name} (${S.me.id})`;
   renderDataset();
   resize();
   await loadFiles();
@@ -146,14 +147,16 @@ const region = (y) => Object.keys(P).find((k) => y >= P[k][0] && y < P[k][1]) ||
 function lowerBound(a, v) { let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < v) lo = m + 1; else hi = m; } return lo; }
 function frameAt(s) { const i = lowerBound(S.view.frame_ends, s + 1); return Math.min(i, nFrames() - 1); }
 function boundary(k) { return k < nFrames() ? S.view.frame_starts[k] : S.view.frame_ends[nFrames() - 1]; }
-function nearestBoundary(s) {
-  const i = frameAt(s);
-  return s - S.view.frame_starts[i] < S.view.frame_ends[i] - s ? i : i + 1;
-}
-function secOfFrame(k) { return boundary(k) / S.view.sr; }
+const maxLen = () => Math.round(S.view.sr * S.view.max_region_ms / 1000);
+const ms = (n) => 1000 * n / S.view.sr;
 function regionText(r) {
   if (!r) return S.hasLabel || S.reviewed ? "비프 없음" : "지정 안 됨";
-  return `${secOfFrame(r[0]).toFixed(1)} ~ ${secOfFrame(r[1]).toFixed(1)}초`;
+  return `${(r[0] / S.view.sr).toFixed(3)} ~ ${(r[1] / S.view.sr).toFixed(3)}초`;
+}
+function centered(c) {  // 100 ms window centred on c (+-50 ms), kept inside the file
+  const L = Math.min(maxLen(), nSamp());
+  const s = Math.max(0, Math.min(nSamp() - L, Math.round(c) - Math.floor(L / 2)));
+  return [s, s + L];
 }
 
 // ================= spectrogram image =================
@@ -220,31 +223,35 @@ function draw() {
 
   // auto suggestion (dashed)
   const au = S.view.auto;
-  if (au && au.start_frame != null) {
-    const x0 = xOf(boundary(au.start_frame)), x1 = xOf(boundary(au.end_frame));
+  if (au && au.start_sample != null) {
+    const x0 = xOf(au.start_sample), x1 = xOf(au.end_sample);
     ctx.strokeStyle = C.auto; ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5;
     ctx.strokeRect(x0 + 1, wy0 + 1, x1 - x0 - 2, sy1 - wy0 - 2);
     ctx.setLineDash([]); ctx.lineWidth = 1;
-    ctx.fillStyle = C.auto; ctx.font = "10px system-ui"; ctx.fillText("자동 제안", x0 + 4, sy1 - 5);
+    ctx.fillStyle = C.auto; ctx.font = "10px system-ui"; ctx.fillText("자동", x0 + 3, sy1 - 5);
   }
 
   // user region
   if (S.region) {
-    const x0 = xOf(boundary(S.region[0])), x1 = xOf(boundary(S.region[1]));
+    const x0 = xOf(S.region[0]), x1 = xOf(S.region[1]);
     ctx.fillStyle = C.region; ctx.fillRect(x0, wy0, x1 - x0, fy1 - wy0);
     ctx.strokeStyle = C["region-line"]; ctx.lineWidth = 2;
     for (const x of [x0, x1]) { ctx.beginPath(); ctx.moveTo(x, wy0); ctx.lineTo(x, fy1); ctx.stroke(); }
     ctx.lineWidth = 1;
     ctx.fillStyle = C["region-line"]; ctx.font = "bold 11px system-ui";
-    ctx.fillText(regionText(S.region), Math.max(2, x0 + 4), wy0 + 12);
+    ctx.fillText(`${regionText(S.region)} (${ms(S.region[1] - S.region[0]).toFixed(0)}ms)`, Math.max(2, x0 + 4), wy0 + 12);
   }
 
   // frame strip
   ctx.fillStyle = C.track; ctx.fillRect(0, fy0, W, fy1 - fy0);
   for (let i = f0; i <= f1; i++) {
     const x0 = xOf(st[i]), w = Math.max(1, xOf(en[i]) - x0 - (fw > 4 ? 1 : 0));
-    const on = S.region && i >= S.region[0] && i < S.region[1];
-    ctx.fillStyle = on ? C["frame-on"] : C.frame; ctx.fillRect(x0, fy0 + 2, w, fy1 - fy0 - 4);
+    const on = S.region && S.region[0] < en[i] && S.region[1] > st[i];
+    ctx.fillStyle = C.frame; ctx.fillRect(x0, fy0 + 2, w, fy1 - fy0 - 4);
+    if (on) {  // highlight only the part of the 100 ms cell covered by the region
+      const a = xOf(Math.max(st[i], S.region[0])), b = xOf(Math.min(en[i], S.region[1]));
+      ctx.fillStyle = C["frame-on"]; ctx.fillRect(a, fy0 + 2, Math.max(1, b - a), fy1 - fy0 - 4);
+    }
     if (fw > 22) { ctx.fillStyle = on ? "#fff" : C.text; ctx.font = "9px system-ui"; ctx.fillText(i, x0 + 3, fy1 - 8); }
   }
 
@@ -289,13 +296,16 @@ function refreshPanels() {
   if (!S.view) return;
   $("region-text").textContent = regionText(S.region);
   $("region-detail").textContent = S.region
-    ? `프레임 ${S.region[0]}–${S.region[1] - 1} (${S.region[1] - S.region[0]}개 × ${S.view.frame_ms}ms) · 샘플 [${boundary(S.region[0])}, ${boundary(S.region[1])})`
+    ? `길이 ${ms(S.region[1] - S.region[0]).toFixed(1)} ms (최대 ${S.view.max_region_ms} ms) · 샘플 [${S.region[0]}, ${S.region[1]})`
     : "";
+  const tooLong = S.region && S.region[1] - S.region[0] > maxLen();
+  $("region-detail").style.color = tooLong ? "var(--warn)" : "";
+  if (tooLong) $("region-detail").textContent += " ⚠ 이전 버전에서 만든 100 ms 초과 구간입니다. 클릭이나 드래그로 다시 지정해야 저장됩니다.";
   const st = S.reviewed ? `<span style="color:var(--ok)">● 검수 완료</span>` : S.hasLabel ? `<span style="color:var(--draft)">● 작업 중</span>` : `<span class="muted">○ 미작업</span>`;
   $("file-state").innerHTML = st;
   const au = S.view.auto;
-  $("auto-info").innerHTML = au && au.start_frame != null
-    ? `${au.start_s.toFixed(1)} ~ ${au.end_s.toFixed(1)}초 <span class="muted small">(파란 점선)</span>`
+  $("auto-info").innerHTML = au && au.start_sample != null
+    ? `${au.start_s.toFixed(3)} ~ ${au.end_s.toFixed(3)}초 <span class="muted small">(파란 점선)</span>`
     : "탐지된 비프 없음";
   $("btn-play-seg").disabled = !S.region;
   updateHover();
@@ -303,7 +313,7 @@ function refreshPanels() {
 function updateHover() {
   if (!S.view) return;
   const s = clampS(S.hoverX >= 0 ? sOf(S.hoverX) : S.cursor), i = frameAt(s);
-  $("statusbar").textContent = `커서 ${fmtS(s)} · 프레임 #${i} (${secOfFrame(i).toFixed(1)}–${secOfFrame(i + 1).toFixed(1)}s) · 보기 ${fmtS(S.v0)}–${fmtS(S.v1)} · ${S.view.sr} Hz`;
+  $("statusbar").textContent = `커서 ${fmtS(s)} · 100ms 칸 #${i} (${(boundary(i) / S.view.sr).toFixed(1)}–${(boundary(i + 1) / S.view.sr).toFixed(1)}s) · 보기 ${fmtS(S.v0)}–${fmtS(S.v1)} · ${S.view.sr} Hz`;
 }
 function setSaveState(t, warn = false) { $("save-state").textContent = t; $("save-state").style.color = warn ? "var(--warn)" : ""; }
 
@@ -342,7 +352,7 @@ async function openFile(idx) {
   S.view = view; S.undo = []; S.redo = [];
   const l = lab.label;
   S.hasLabel = !!l;
-  S.region = l && l.start_frame != null ? [l.start_frame, l.end_frame] : null;
+  S.region = l && l.start_sample != null ? [l.start_sample, l.end_sample] : null;
   S.reviewed = !!(l && l.reviewed); S.memo = l ? l.memo : "";
   $("memo").value = S.memo;
   S.saved = stateJSON();
@@ -367,8 +377,8 @@ async function flushSave() {
   if (isDirty()) await save();
 }
 function payload() {
-  return JSON.stringify({ file: S.files[S.idx].file, start_frame: S.region ? S.region[0] : null,
-    end_frame: S.region ? S.region[1] : null, reviewed: S.reviewed, memo: S.memo });
+  return JSON.stringify({ file: S.files[S.idx].file, start_sample: S.region ? S.region[0] : null,
+    end_sample: S.region ? S.region[1] : null, reviewed: S.reviewed, memo: S.memo });
 }
 async function save() {
   if (S.idx < 0 || !S.view) return;
@@ -380,7 +390,7 @@ async function save() {
       if (S.idx === idx) { S.hasLabel = true; S.saved = snap; setSaveState(`저장됨 ${r.label.updated_at} (${S.me.id})`); }
       const f = S.files[idx];
       f.status = r.label.reviewed ? "reviewed" : "draft";
-      f.region = r.label.start_s == null ? "비프 없음" : `${r.label.start_s.toFixed(1)}~${r.label.end_s.toFixed(1)}초`;
+      f.region = r.label.start_s == null ? "비프 없음" : `${r.label.start_s.toFixed(3)}~${r.label.end_s.toFixed(3)}초`;
       renderFiles(); refreshPanels();
       if (r.actions.length) loadHistory();
     })
@@ -403,14 +413,15 @@ function undo() { if (S.undo.length) { S.redo.push(snapshot()); S.region = JSON.
 function redo() { if (S.redo.length) { S.undo.push(snapshot()); S.region = JSON.parse(S.redo.pop()); changed(); } }
 function applyAuto() {
   const a = S.view.auto;
-  pushUndo(); S.region = a && a.start_frame != null ? [a.start_frame, a.end_frame] : null; changed();
+  pushUndo(); S.region = a && a.start_sample != null ? [a.start_sample, a.end_sample] : null; changed();
 }
 function noBeep() { pushUndo(); S.region = null; changed(); }
-function shift(which, d) {
+function shift(which, dMs) {
   if (!S.region) return;
   pushUndo();
-  const r = [...S.region];
-  if (which === 0) r[0] = Math.max(0, Math.min(r[1] - 1, r[0] + d)); else r[1] = Math.max(r[0] + 1, Math.min(nFrames(), r[1] + d));
+  const d = Math.round(dMs * S.view.sr / 1000), r = [...S.region];
+  if (which === 0) r[0] = Math.max(0, r[1] - maxLen(), Math.min(r[1] - 1, r[0] + d));
+  else r[1] = Math.min(nSamp(), r[0] + maxLen(), Math.max(r[0] + 1, r[1] + d));
   S.region = r; changed();
 }
 
@@ -423,13 +434,13 @@ canvas.addEventListener("mousedown", (ev) => {
   if (rg === "axis" || !rg) { S.cursor = clampS(sOf(x)); seekIfPlaying(); draw(); updateHover(); return; }
   const snap = snapshot();
   if (S.region) {
-    const xa = xOf(boundary(S.region[0])), xb = xOf(boundary(S.region[1]));
+    const xa = xOf(S.region[0]), xb = xOf(S.region[1]);
     if (Math.abs(x - xa) <= 6 || Math.abs(x - xb) <= 6) {
       drag = { mode: "edge", x0: x, side: Math.abs(x - xa) <= Math.abs(x - xb) ? 0 : 1, snap, moved: false }; return;
     }
-    if (x > xa && x < xb) { drag = { mode: "move", x0: x, f0: frameAt(sOf(x)), r0: [...S.region], snap, moved: false }; return; }
+    if (x > xa && x < xb) { drag = { mode: "move", x0: x, s0: sOf(x), r0: [...S.region], snap, moved: false }; return; }
   }
-  drag = { mode: "create", x0: x, anchor: frameAt(clampS(sOf(x))), snap, moved: false };
+  drag = { mode: "create", x0: x, anchor: clampS(sOf(x)), snap, moved: false };
 });
 window.addEventListener("mousemove", (ev) => {
   if (!S.view || $("app-view").hidden) return;
@@ -439,23 +450,26 @@ window.addEventListener("mousemove", (ev) => {
     const s = clampS(sOf(Math.max(0, Math.min(W, x))));
     if (Math.abs(x - drag.x0) > 3) drag.moved = true;
     if (drag.mode === "edge" && drag.moved) {
-      const b = nearestBoundary(s), rr = [...S.region];
-      if (drag.side === 0) rr[0] = Math.min(b, rr[1] - 1); else rr[1] = Math.max(b, rr[0] + 1);
+      const rr = [...S.region];
+      if (drag.side === 0) rr[0] = Math.max(rr[1] - maxLen(), Math.min(s, rr[1] - 1));
+      else rr[1] = Math.min(rr[0] + maxLen(), Math.max(s, rr[0] + 1));
       S.region = rr;
     } else if (drag.mode === "move" && drag.moved) {
       const len = drag.r0[1] - drag.r0[0];
-      const st = Math.max(0, Math.min(nFrames() - len, drag.r0[0] + frameAt(s) - drag.f0));
+      const st = Math.max(0, Math.min(nSamp() - len, drag.r0[0] + sOf(x) - drag.s0));
       S.region = [st, st + len];
     } else if (drag.mode === "create" && drag.moved) {
-      const c = frameAt(s);
-      S.region = [Math.min(drag.anchor, c), Math.max(drag.anchor, c) + 1];
+      // span from the press point, capped at 100 ms
+      const a = drag.anchor, L = maxLen();
+      S.region = s >= a ? [a, Math.min(s, a + L)] : [Math.max(s, a - L), a];
+      if (S.region[1] <= S.region[0]) S.region[1] = S.region[0] + 1;
     }
     refreshPanels();
   } else {
     const rg = region(y);
     let cur = "crosshair";
     if (S.region && rg && rg !== "axis") {
-      const xa = xOf(boundary(S.region[0])), xb = xOf(boundary(S.region[1]));
+      const xa = xOf(S.region[0]), xb = xOf(S.region[1]);
       if (Math.abs(x - xa) <= 6 || Math.abs(x - xb) <= 6) cur = "ew-resize"; else if (x > xa && x < xb) cur = "grab";
     }
     canvas.style.cursor = cur;
@@ -465,8 +479,12 @@ window.addEventListener("mousemove", (ev) => {
 });
 window.addEventListener("mouseup", () => {
   if (!drag) return;
-  if (!drag.moved) { S.cursor = clampS(sOf(drag.x0)); seekIfPlaying(); }
-  else if (snapshot() !== drag.snap) { S.undo.push(drag.snap); S.redo = []; changed(); }
+  if (!drag.moved && drag.mode !== "edge") {
+    // plain click: 100 ms window centred on the click point (+-50 ms)
+    S.region = centered(sOf(drag.x0));
+    S.cursor = S.region[0];
+  }
+  if (snapshot() !== drag.snap) { S.undo.push(drag.snap); S.redo = []; changed(); }
   drag = null; refreshPanels(); draw();
 });
 canvas.addEventListener("wheel", (ev) => {
@@ -497,7 +515,7 @@ function playAll() {
   if (!audio.paused && S.playEnd === null) { stop(); return; }
   play(S.cursor >= nSamp() - 100 ? 0 : S.cursor);
 }
-function playSeg() { if (S.region) play(boundary(S.region[0]), boundary(S.region[1])); }
+function playSeg() { if (S.region) play(S.region[0], S.region[1]); }
 function stop() { audio.pause(); S.playEnd = null; tick(); }
 function seekIfPlaying() { if (!audio.paused && S.playEnd === null) audio.currentTime = S.cursor / S.view.sr; }
 function tick() {
@@ -525,8 +543,8 @@ window.addEventListener("keydown", async (ev) => {
   const map = {
     Space: playAll, Enter: playSeg, Escape: stop,
     Delete: noBeep, Backspace: noBeep, KeyA: applyAuto,
-    BracketLeft: () => shift(0, -1), BracketRight: () => shift(0, 1),
-    Semicolon: () => shift(1, -1), Quote: () => shift(1, 1),
+    BracketLeft: () => shift(0, ev.shiftKey ? -10 : -1), BracketRight: () => shift(0, ev.shiftKey ? 10 : 1),
+    Semicolon: () => shift(1, ev.shiftKey ? -10 : -1), Quote: () => shift(1, ev.shiftKey ? 10 : 1),
     Equal: () => zoom(0.5), NumpadAdd: () => zoom(0.5), Minus: () => zoom(2), NumpadSubtract: () => zoom(2),
     KeyF: () => setView(0, nSamp()), KeyB: toggleBig, KeyT: toggleTheme,
     KeyR: reviewNext, KeyN: () => nextFile(1), ArrowDown: () => nextFile(1), KeyP: () => nextFile(-1), ArrowUp: () => nextFile(-1),
@@ -579,15 +597,9 @@ $("btn-help").onclick = () => $("dlg-help").showModal();
 $("btn-rescan").onclick = async () => { S.settings = await api("/api/rescan", { method: "POST" }); renderDataset(); await loadFiles(); };
 
 function openSettings() {
-  const s = S.settings, admin = S.me.is_admin;
-  $("set-path").value = s.dataset_path; $("set-path").disabled = !admin;
-  $("set-register").checked = s.allow_register; $("set-register").disabled = !admin;
-  $("set-save").hidden = !admin;
-  $("set-path-hint").textContent = admin
-    ? "WAV 파일이 들어 있는 폴더의 전체 경로를 입력하세요 (하위 폴더까지 검색). 저장하면 다음 실행에도 그대로 사용됩니다."
-    : "데이터 폴더는 관리자만 바꿀 수 있습니다.";
-  $("set-datadir").textContent = s.data_dir;
-  $("set-error").textContent = ""; $("pw-msg").textContent = "";
+  $("set-path").value = S.settings.dataset_path;
+  $("set-datadir").textContent = S.settings.data_dir;
+  $("set-error").textContent = "";
   $("dlg-settings").showModal();
 }
 $("btn-settings").onclick = openSettings;
@@ -595,19 +607,11 @@ $("set-save").onclick = async (ev) => {
   ev.preventDefault();
   try {
     await flushSave();
-    S.settings = await api("/api/settings", { method: "PUT", body: JSON.stringify({ dataset_path: $("set-path").value, allow_register: $("set-register").checked }) });
+    S.settings = await api("/api/settings", { method: "PUT", body: JSON.stringify({ dataset_path: $("set-path").value }) });
     renderDataset(); $("dlg-settings").close();
     S.idx = -1; S.view = null; await loadFiles();
     if (S.files.length) openFile(0);
   } catch (e) { $("set-error").textContent = e.message; }
-};
-$("pw-save").onclick = async (ev) => {
-  ev.preventDefault();
-  try {
-    await api("/api/me/password", { method: "PUT", body: JSON.stringify({ old: $("pw-old").value, new: $("pw-new").value }) });
-    $("pw-msg").textContent = "변경했습니다. 다시 로그인하세요."; $("pw-msg").style.color = "var(--ok)";
-    setTimeout(() => { $("dlg-settings").close(); showLogin(); }, 1200);
-  } catch (e) { $("pw-msg").textContent = e.message; $("pw-msg").style.color = "var(--warn)"; }
 };
 
 $("btn-export").onclick = () => $("dlg-export").showModal();

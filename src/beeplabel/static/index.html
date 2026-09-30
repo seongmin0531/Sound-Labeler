@@ -16,18 +16,20 @@
       <div class="brand">Beep Labeler <span id="login-version" class="muted"></span></div>
       <button class="theme-btn" type="button" title="테마 전환">◐</button>
     </div>
-    <div class="tabs">
-      <button id="tab-login" class="tab active" type="button">로그인</button>
-      <button id="tab-register" class="tab" type="button">회원가입</button>
-    </div>
     <form id="login-form" autocomplete="on">
-      <label>아이디<input id="lg-id" name="username" autocomplete="username" required></label>
-      <label id="lg-name-row" hidden>이름 (표시용)<input id="lg-name" autocomplete="name"></label>
-      <label>비밀번호<input id="lg-pw" name="password" type="password" autocomplete="current-password" required></label>
+      <label>아이디<input id="lg-id" name="username" autocomplete="username" required placeholder="예: hong"></label>
+      <div id="lg-new" hidden>
+        <p class="small">처음 보는 아이디입니다. <b id="lg-new-id"></b> 로 새로 시작할까요?
+          <span class="muted">(오타라면 아이디를 다시 입력하세요)</span></p>
+        <label>이름 (표시용, 선택)<input id="lg-name" autocomplete="name"></label>
+      </div>
       <div id="lg-error" class="error"></div>
       <button id="lg-submit" class="primary wide" type="submit">로그인</button>
-      <p id="lg-hint" class="muted small"></p>
     </form>
+    <div id="lg-users-wrap" hidden>
+      <div class="muted small" style="margin-top:14px">기존 아이디 (클릭하면 바로 로그인)</div>
+      <div id="lg-users" class="chips"></div>
+    </div>
   </div>
 </div>
 
@@ -98,7 +100,7 @@
       <div><span class="muted">비프 구간</span> <b id="region-text">—</b></div>
       <div id="region-detail" class="muted small"></div>
       <div class="spacer"></div>
-      <div class="muted small">파형이나 스펙트로그램을 <b>드래그</b>해서 비프가 나는 부분을 표시하세요 (100 ms 단위, 파일당 1구간)</div>
+      <div class="muted small"><b>드래그</b>: 0~100 ms 구간 · <b>클릭</b>: 클릭 지점 ±50 ms (100 ms) · 파일당 1구간</div>
     </div>
     <div id="statusbar" class="muted small"></div>
   </main>
@@ -132,17 +134,11 @@
     <label class="block">WAV 데이터 폴더 경로
       <input id="set-path" placeholder="예: D:\beep_dataset">
     </label>
-    <p id="set-path-hint" class="muted small"></p>
-    <label><input type="checkbox" id="set-register"> 새 회원가입 허용</label>
-    <p class="muted small">계정·라벨·작업 이력 저장 위치: <code id="set-datadir"></code></p>
+    <p class="muted small">WAV 파일이 들어 있는 폴더의 전체 경로를 입력하세요 (하위 폴더까지 검색).
+      저장하면 다음 실행에도 그대로 사용되고, 모든 작업자에게 같이 적용됩니다.</p>
+    <p class="muted small">아이디·라벨·작업 이력 저장 위치: <code id="set-datadir"></code></p>
     <div id="set-error" class="error"></div>
     <div class="row"><button value="cancel">닫기</button><button id="set-save" class="primary" value="default">저장</button></div>
-    <hr>
-    <h3>비밀번호 변경</h3>
-    <label class="block">현재 비밀번호<input id="pw-old" type="password" autocomplete="current-password"></label>
-    <label class="block">새 비밀번호<input id="pw-new" type="password" autocomplete="new-password"></label>
-    <div id="pw-msg" class="small"></div>
-    <div class="row"><button id="pw-save" value="default">변경</button></div>
   </form>
 </dialog>
 
@@ -169,14 +165,15 @@
   <form method="dialog">
     <h3>사용법 · 단축키</h3>
     <table class="keys">
-      <tr><td>빈 곳 드래그</td><td>비프 구간 지정 (100 ms 칸 단위, 파일당 1구간, 새로 드래그하면 교체)</td></tr>
-      <tr><td>구간 가장자리 드래그</td><td>시작/끝 조정 (100 ms 단위)</td></tr>
+      <tr><td>드래그</td><td>비프 구간 지정 (길이 0~100 ms, 1 ms 단위, 파일당 1구간, 새로 드래그하면 교체)</td></tr>
+      <tr><td>클릭</td><td>클릭 위치 중심으로 양옆 50 ms씩, 100 ms 구간 선택</td></tr>
+      <tr><td>구간 가장자리 드래그</td><td>시작/끝 조정 (최대 길이 100 ms 유지)</td></tr>
       <tr><td>구간 내부 드래그</td><td>구간 이동</td></tr>
-      <tr><td>빈 곳 클릭</td><td>재생 커서 이동</td></tr>
+      <tr><td>아래 시간축 클릭</td><td>재생 커서 이동</td></tr>
       <tr><td>Space</td><td>전체 듣기 (커서부터) / 정지</td></tr>
       <tr><td>Enter</td><td>구간만 듣기</td></tr>
       <tr><td>Esc</td><td>정지</td></tr>
-      <tr><td>[ ]  /  ; '</td><td>구간 시작 / 끝을 한 칸(100 ms) 앞·뒤로</td></tr>
+      <tr><td>[ ]  /  ; '</td><td>구간 시작 / 끝을 1 ms 앞·뒤로 (Shift: 10 ms)</td></tr>
       <tr><td>A</td><td>자동 제안 구간 적용</td></tr>
       <tr><td>Delete</td><td>구간 삭제 = 비프 없음</td></tr>
       <tr><td>휠 / Shift+휠</td><td>확대·축소 / 좌우 이동</td></tr>

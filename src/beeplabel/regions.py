@@ -1,8 +1,8 @@
-"""One beep region per sample, snapped to the 100 ms frame grid.
+"""One beep region per sample: a free-position span of at most 100 ms.
 
-A region is [start_frame, end_frame) in frame indices; its time range is
-[frame_start[start_frame], frame_end[end_frame - 1]) in samples. The audio is never cut:
-the region only marks where the beep is. No region (None) means "no beep in this sample".
+A region is [start, end) in sample indices with 0 < end - start <= 100 ms. The audio is
+never cut: the region only marks where the beep is. None means "no beep in this sample".
+Exports also give the 100 ms window centred on the region (the clip to cut later).
 """
 
 from __future__ import annotations
@@ -11,37 +11,55 @@ import numpy as np
 
 from .detector import Event
 
+MAX_MS = 100.0
 
-def validate(start_frame, end_frame, n_frames: int) -> tuple[int, int] | tuple[None, None]:
-    if start_frame is None or end_frame is None:
+
+def max_len(sr: int) -> int:
+    return int(round(sr * MAX_MS / 1000))
+
+
+def validate(start, end, n: int, sr: int) -> tuple[int, int] | tuple[None, None]:
+    if start is None or end is None:
         return None, None
-    s, e = int(start_frame), int(end_frame)
-    if not (0 <= s < e <= n_frames):
-        raise ValueError(f"invalid region [{s}, {e}) for {n_frames} frames")
+    s, e = int(start), int(end)
+    if not (0 <= s < e <= n):
+        raise ValueError(f"구간이 파일 범위를 벗어났습니다: [{s}, {e}) / {n}")
+    if e - s > max_len(sr):
+        raise ValueError(f"구간은 최대 {MAX_MS:g} ms 입니다 (현재 {1000 * (e - s) / sr:.1f} ms)")
     return s, e
 
 
-def seconds(bounds: np.ndarray, sr: int, s, e) -> tuple[float | None, float | None]:
+def seconds(sr: int, s, e) -> tuple[float | None, float | None]:
     if s is None:
         return None, None
-    return round(float(bounds[s, 0]) / sr, 6), round(float(bounds[e - 1, 1]) / sr, 6)
+    return round(s / sr, 6), round(e / sr, 6)
 
 
-def suggest(events: list[Event], bounds: np.ndarray) -> tuple[int, int] | tuple[None, None]:
-    """Smallest frame-aligned region covering every detected beep (first onset -> last offset)."""
-    if not events or len(bounds) == 0:
+def centered(center: int, n: int, sr: int) -> tuple[int, int]:
+    """100 ms window centred on `center` (+-50 ms), shifted to stay inside the file."""
+    L = min(max_len(sr), n)
+    s = int(center) - L // 2
+    s = max(0, min(n - L, s))
+    return s, s + L
+
+
+def suggest(events: list[Event], n: int, sr: int) -> tuple[int, int] | tuple[None, None]:
+    """First detected beep: from its onset, at most 100 ms long."""
+    if not events:
         return None, None
-    first = min(e.start for e in events)
-    last = max(e.end for e in events)
-    s = int(np.searchsorted(bounds[:, 1], first, side="right"))       # frame containing onset
-    e = int(np.searchsorted(bounds[:, 0], last, side="left"))         # first frame starting at/after offset
-    s = min(s, len(bounds) - 1)
-    e = max(e, s + 1)
-    return s, min(e, len(bounds))
+    ev = min(events, key=lambda e: e.start)
+    s = max(0, ev.start)
+    return s, min(ev.end, s + max_len(sr), n)
 
 
-def frame_vector(n_frames: int, s, e) -> np.ndarray:
-    v = np.zeros(n_frames, dtype=np.int8)
-    if s is not None:
-        v[s:e] = 1
-    return v
+def clip_window(s, e, n: int, sr: int) -> tuple[int, int] | tuple[None, None]:
+    if s is None:
+        return None, None
+    return centered((s + e) // 2, n, sr)
+
+
+def frame_overlap(bounds: np.ndarray, s, e) -> np.ndarray:
+    """Samples of [s, e) inside each 100 ms grid frame."""
+    if s is None:
+        return np.zeros(len(bounds), dtype=np.int64)
+    return np.clip(np.minimum(bounds[:, 1], e) - np.maximum(bounds[:, 0], s), 0, None)

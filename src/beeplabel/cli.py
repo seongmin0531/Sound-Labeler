@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import getpass
 import sys
 import threading
 import webbrowser
@@ -67,64 +66,54 @@ def cmd_export(a):
 def cmd_users(a):
     app = App(a.data_dir)
     for u in app.db.users():
-        print(f"{u['id']:<20} {u['display_name']:<16} {'admin' if u['is_admin'] else '':<6} "
-              f"가입 {u['created_at']}  최근 로그인 {u['last_login'] or '-'}")
-
-
-def cmd_reset_password(a):
-    app = App(a.data_dir)
-    if not app.db.get_user(a.user_id):
-        sys.exit(f"없는 아이디: {a.user_id}")
-    pw = a.password or getpass.getpass("새 비밀번호: ")
-    app.db.set_password(a.user_id, pw)
-    app.db.log(None, "비밀번호 초기화", detail=f"대상: {a.user_id} (CLI)")
-    print("비밀번호를 변경했습니다. 해당 아이디의 기존 로그인은 모두 해제됩니다.")
-
-
-def cmd_make_admin(a):
-    app = App(a.data_dir)
-    with app.db.conn() as c:
-        n = c.execute("UPDATE users SET is_admin=1 WHERE id=?", (a.user_id,)).rowcount
-    print("관리자로 지정했습니다." if n else f"없는 아이디: {a.user_id}")
+        print(f"{u['id']:<20} {u['display_name']:<16} "
+              f"생성 {u['created_at']}  최근 로그인 {u['last_login'] or '-'}")
 
 
 def cmd_agree(a):
     """Agreement between two annotators (or an annotator and 'auto') over shared files."""
+    from .export import AGREE_TOL_MS
+
     app = _app(a)
     ua, ub = a.users
 
     def region_of(user, f):
         if user == "auto":
             r = app.auto_region(f)
-            return r["start_frame"], r["end_frame"]
+            return r["start_sample"], r["end_sample"]
         l = app.db.get_label(app.dataset_key, f, user)
         if l is None or (a.reviewed_only and not l["reviewed"]):
             return None
-        return l["start_frame"], l["end_frame"]
+        return l["start_sample"], l["end_sample"]
 
     fs = FrameStats()
-    exact = n = 0
+    n = agree = 0
     ds, de = [], []
     for f in app.files:
         ra, rb = region_of(ua, f), region_of(ub, f)
         if ra is None or rb is None:
             continue
-        nb = len(app.bounds(f))
-        fs.add(regions.frame_vector(nb, *ra), regions.frame_vector(nb, *rb))
+        sr = app.info(f).sample_rate
+        b = app.bounds(f)
+        fs.add(regions.frame_overlap(b, *ra) > 0, regions.frame_overlap(b, *rb) > 0)
         n += 1
-        exact += ra == rb
-        if ra[0] is not None and rb[0] is not None:
-            ds.append(abs(ra[0] - rb[0]))
-            de.append(abs(ra[1] - rb[1]))
+        if (ra[0] is None) != (rb[0] is None):
+            continue
+        if ra[0] is None:
+            agree += 1
+            continue
+        d0, d1 = 1000 * abs(ra[0] - rb[0]) / sr, 1000 * abs(ra[1] - rb[1]) / sr
+        ds.append(d0)
+        de.append(d1)
+        agree += max(d0, d1) <= AGREE_TOL_MS
     if not n:
         print("두 작업자가 함께 라벨링한 파일이 없습니다.")
         return
-    fm = app.config.frames.frame_ms
     print(f"비교 파일 {n}개 ({ua} vs {ub})")
-    print(f"  구간 완전 일치: {exact}/{n} ({100 * exact / n:.1f}%)")
+    print(f"  일치(경계 차이 <= {AGREE_TOL_MS:g} ms, 비프 유무 동일): {agree}/{n} ({100 * agree / n:.1f}%)")
     if ds:
-        print(f"  시작 경계 평균 차이: {fm * sum(ds) / len(ds):.1f} ms, 끝 경계 평균 차이: {fm * sum(de) / len(de):.1f} ms")
-    print("  프레임 단위:", fmt(fs.summary()))
+        print(f"  시작 경계 평균 차이: {sum(ds) / len(ds):.1f} ms, 끝 경계 평균 차이: {sum(de) / len(de):.1f} ms")
+    print("  100 ms 프레임 단위:", fmt(fs.summary()))
 
 
 def cmd_demo(a):
@@ -149,7 +138,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="beeplabel", description="Beep Labeler " + __version__)
     ap.add_argument("--version", action="version", version=__version__)
     ap.add_argument("--data-dir", default=None,
-                    help=f"계정/라벨/이력 DB 저장 폴더 (기본: {DEFAULT_DATA_DIR}, 환경변수 BEEPLABEL_DATA)")
+                    help=f"아이디/라벨/이력 DB 저장 폴더 (기본: {DEFAULT_DATA_DIR}, 환경변수 BEEPLABEL_DATA)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     sp = sub.add_parser("serve", help="웹 화면 실행")
@@ -169,17 +158,8 @@ def main(argv=None):
     sp.add_argument("--reviewed-only", action="store_true")
     sp.set_defaults(func=cmd_export)
 
-    sp = sub.add_parser("users", help="계정 목록")
+    sp = sub.add_parser("users", help="아이디 목록")
     sp.set_defaults(func=cmd_users)
-
-    sp = sub.add_parser("reset-password", help="비밀번호 초기화 (관리자용)")
-    sp.add_argument("user_id")
-    sp.add_argument("--password")
-    sp.set_defaults(func=cmd_reset_password)
-
-    sp = sub.add_parser("make-admin", help="관리자 권한 부여")
-    sp.add_argument("user_id")
-    sp.set_defaults(func=cmd_make_admin)
 
     sp = sub.add_parser("agree", help="작업자 간 (또는 작업자-자동탐지) 일치도")
     sp.add_argument("--dataset", "-d")
