@@ -128,6 +128,18 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
   #insp { border-left: 0; border-top: 1px solid var(--line); }
   #wrap { height: 340px; }
 }
+
+/* status segmented control, unsaved marker, saved-change rows */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: transparent; padding: 3px 10px; font-size: 12px; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on[data-st="none"] { background: var(--surface-2); color: var(--fg); font-weight: 600; }
+.seg button.on[data-st="draft"] { background: var(--draft); color: #fff; }
+.seg button.on[data-st="reviewed"] { background: var(--ok); color: #fff; }
+#btn-save.dirty { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+#history .chg { color: var(--muted); font-size: 12px; }
+#history .chg.to { color: var(--fg); }
+#clip-result { white-space: pre-wrap; font: 12px var(--mono); margin: 8px 0 0; }
 </style>
 
 <!-- ================= login ================= -->
@@ -157,7 +169,7 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
     <span id="who"></span>
     <button class="theme-btn" title="테마 전환 (T)">◐ 테마</button>
     <button id="btn-export">엑셀/CSV 내보내기</button>
-    <button id="btn-backup">백업·복원</button>
+    <button id="btn-backup">백업·초기화</button>
     <button id="btn-help" title="단축키 (?)">?</button>
     <button id="btn-logout" class="primary">저장 후 로그아웃</button>
   </header>
@@ -177,15 +189,22 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
       <div id="toolbar">
         <div class="grp"><button id="btn-play-all" title="Space">▶ 전체 듣기</button><button id="btn-play-seg" title="Enter">▶ 구간만 듣기</button><button id="btn-stop" title="Esc">■ 정지</button></div>
         <div class="grp"><button id="btn-zin" title="=">＋</button><button id="btn-zout" title="-">－</button><button id="btn-fit" title="F">전체 보기</button><button id="btn-big" title="B">스펙트로그램 크게 보기</button></div>
-        <div class="grp"><button id="btn-save" title="Ctrl+S">저장</button><button id="btn-review" class="primary" title="R">검수 완료 → 다음</button></div>
+        <div class="grp"><button id="btn-save" title="Ctrl+S">💾 저장</button><button id="btn-review" class="primary" title="R">검수 완료 → 다음</button></div>
         <label class="small muted row" for="gain">파형 배율 <select id="gain"><option value="1">자동 맞춤</option><option value="2">×2</option><option value="4">×4</option><option value="8">×8</option></select></label>
       </div>
-      <div id="title-row"><span id="file-title">—</span><span id="file-state"></span><span class="spacer"></span><span id="save-state" class="muted small"></span></div>
+      <div id="title-row">
+        <span id="file-title">—</span>
+        <div class="seg" id="status-seg" role="group" aria-label="작업 상태">
+          <button type="button" data-st="none">미작업</button><button type="button" data-st="draft">작업 중</button><button type="button" data-st="reviewed">검수 완료</button>
+        </div>
+        <span class="spacer"></span><span id="save-state" class="muted small"></span>
+      </div>
       <div id="empty" class="note" hidden></div>
       <div id="wrap"><canvas id="cv"></canvas></div>
       <div id="region-bar">
         <div><span class="muted">비프 구간</span> <span id="region-text">—</span></div>
         <div id="region-detail" class="muted small num"></div>
+        <button id="btn-cut" type="button" title="주황색 구간의 오디오를 잘라 WAV로 저장">✂ 구간 잘라 저장</button>
         <span class="spacer"></span>
         <div class="muted small"><b>드래그</b>: 원하는 길이로 구간 지정 · <b>클릭</b>: 클릭 지점 ±50 ms · 10 ms 단위 · 파일당 1구간</div>
       </div>
@@ -194,10 +213,11 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
     <aside id="insp">
       <h3>메모 (데이터 특징)</h3>
       <textarea id="memo" rows="4" placeholder="예: 비프 2회 반복, 배경에 음악, 창문 열림…" aria-label="메모"></textarea>
-      <div class="muted small">자동 저장되며 엑셀·CSV의 memo 열에 들어갑니다.</div>
-      <h3>이 파일에서 내가 한 작업 <button id="btn-hist-edit" class="hist-btn" type="button">이력 정리</button></h3>
+      <div class="muted small">저장 버튼을 누르면 기록되고, 엑셀·CSV의 memo 열에 들어갑니다.</div>
+      <h3>이 파일에서 내가 저장한 기록 <button id="btn-hist-edit" class="hist-btn" type="button">이력 정리</button></h3>
+      <div class="muted small" style="margin-bottom:6px">💾 저장을 누를 때마다 그때까지 바뀐 내용이 한 줄로 남습니다.</div>
       <div id="hist-tools" hidden>
-        <span class="muted small">지울 이력을 체크하세요 (라벨은 그대로 두고 이력만 지웁니다)</span>
+        <span class="muted small">지울 기록을 체크하세요 (라벨은 그대로 두고 기록만 지웁니다)</span>
         <div class="row end"><button id="btn-hist-all" type="button">전체 선택</button><span class="spacer"></span><button id="btn-hist-cancel" type="button">취소</button><button id="btn-hist-del" class="danger" type="button" disabled>선택 삭제</button></div>
       </div>
       <ul id="history"></ul>
@@ -207,21 +227,23 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
 
 <!-- ================= dialogs ================= -->
 <dialog id="dlg-confirm"><h2 id="cf-title">확인</h2><p id="cf-text" style="white-space:pre-wrap"></p>
-  <div class="row end"><button id="cf-no" type="button">취소</button><button id="cf-yes" class="danger" type="button">확인</button></div></dialog>
+  <div class="row end"><button id="cf-no" type="button">취소</button><button id="cf-alt" type="button" hidden>저장 안 함</button><button id="cf-yes" class="danger" type="button">확인</button></div></dialog>
 
 <dialog id="dlg-export">
   <h2>내보내기</h2>
-  <p class="muted small">로그인한 아이디의 라벨, 작업 이력(언제 · 무엇을 · 어떻게), 메모가 들어갑니다. 팀원과 비교하려면 각자 받은 엑셀을 아래에서 합치세요.</p>
+  <p class="muted small">로그인한 아이디가 <b>저장한</b> 라벨, 저장 기록, 메모가 들어갑니다. 팀원과 비교하려면 각자 받은 엑셀을 아래에서 합치세요.</p>
   <label class="row small" for="exp-reviewed"><input type="checkbox" id="exp-reviewed"> 검수 완료된 라벨만</label>
   <div class="grid2" style="margin-top:10px">
     <button id="exp-xlsx" class="primary" type="button">📊 엑셀 (.xlsx)</button><span class="muted small">라벨 결과 · 작업 이력 · 작업자 요약 · 파일 현황 · 정보</span>
-    <button id="exp-labels" type="button">labels.csv</button><span class="muted small">파일별 비프 구간(초) + 메모</span>
+    <button id="exp-labels" type="button">labels.csv</button><span class="muted small">파일별 비프 구간(초) + 상태 + 메모</span>
     <button id="exp-frames" type="button">frames.csv</button><span class="muted small">100 ms 칸별 overlap_ms, label</span>
-    <button id="exp-audit" type="button">audit.csv</button><span class="muted small">작업 이력</span>
+    <button id="exp-audit" type="button">audit.csv</button><span class="muted small">저장 기록</span>
+    <button id="exp-clips" type="button">✂ 구간 오디오 (.zip)</button><span class="muted small">비프 구간을 지정한 모든 파일의 구간을 잘라 WAV로 묶음 (폴더를 열어 둔 상태에서)</span>
   </div>
+  <pre id="clip-result"></pre>
   <hr>
   <h2>여러 사람의 엑셀 합치기</h2>
-  <p class="muted small">팀원들이 각자 내보낸 엑셀(.xlsx)을 모두 선택하면 한 엑셀로 합쳐집니다. 파일 현황 시트에 작업자 간 일치(±20 ms)가 나옵니다. 같은 파일·같은 아이디는 가장 최근 수정본을 씁니다. 파일은 이 브라우저 안에서만 처리됩니다.</p>
+  <p class="muted small">팀원들이 각자 내보낸 엑셀(.xlsx)을 모두 선택하면 한 엑셀로 합쳐집니다. 파일 현황 시트에 작업자 간 일치(±20 ms)가 나옵니다. 같은 파일·같은 아이디는 가장 최근 저장본을 씁니다. 파일은 이 브라우저 안에서만 처리됩니다.</p>
   <input type="file" id="merge-files" accept=".xlsx" multiple aria-label="합칠 엑셀 파일">
   <div class="row" style="margin-top:8px"><button id="merge-run" class="primary" type="button" disabled>📎 합친 엑셀 받기</button></div>
   <pre id="merge-result"></pre>
@@ -230,10 +252,14 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
 </dialog>
 
 <dialog id="dlg-backup">
-  <h2>백업 · 복원</h2>
-  <p class="small">기록은 이 브라우저에만 있어서, <b>브라우저 기록(사이트 데이터) 삭제, 시크릿 창, 다른 PC·브라우저</b>에서는 보이지 않습니다. 가끔 백업 파일을 받아 두세요. 다른 PC에서 이어서 하려면 거기서 복원하면 됩니다.</p>
+  <h2>백업 · 초기화</h2>
+  <p class="small">기록은 이 브라우저에만 있어서, <b>브라우저 기록(사이트 데이터) 삭제, 시크릿 창, 다른 PC·브라우저</b>에서는 보이지 않습니다. 가끔 백업 파일을 받아 두세요.</p>
   <div class="row"><button id="bk-save" class="primary" type="button">⬇ 내 기록 백업 (.json)</button>
-    <label class="row small" for="bk-file">복원: <input type="file" id="bk-file" accept=".json"></label></div>
+    <label class="row small" for="bk-file">백업 불러오기: <input type="file" id="bk-file" accept=".json"></label></div>
+  <hr>
+  <h2>처음 상태로 초기화</h2>
+  <p class="small">폴더에서 처음 가져왔을 때처럼 <b>비프 구간 · 메모 · 상태 · 저장 기록</b>을 모두 지웁니다. 원본 WAV 파일은 바뀌지 않습니다. 되돌릴 수 없으니 필요하면 먼저 백업하세요.</p>
+  <div class="row"><button id="rs-file" class="danger" type="button">이 파일 초기화</button><button id="rs-folder" class="danger" type="button">폴더 전체 초기화</button></div>
   <pre id="backup-result"></pre>
   <div class="row end"><button type="button" data-close>닫기</button></div>
 </dialog>
@@ -250,24 +276,26 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
     <tr><td>[ ]  ; '</td><td>구간 시작 / 끝 ∓10 ms (Shift: 100 ms)</td></tr>
     <tr><td>휠, Shift+휠</td><td>확대·축소, 좌우 이동</td></tr>
     <tr><td>= - F B T</td><td>확대 / 축소 / 전체 보기 / 스펙트로그램 크게 / 테마</td></tr>
-    <tr><td>R</td><td>검수 완료 + 다음 파일</td></tr>
+    <tr><td>Ctrl+S</td><td>저장 (저장할 때만 기록이 남습니다)</td></tr>
+    <tr><td>R</td><td>검수 완료로 저장 + 다음 파일</td></tr>
     <tr><td>N P (↓ ↑)</td><td>다음 / 이전 파일</td></tr>
-    <tr><td>Ctrl+S, Ctrl+Z</td><td>저장(자동 저장도 됨), 실행 취소</td></tr>
+    <tr><td>Ctrl+Z</td><td>구간 실행 취소</td></tr>
   </table>
-  <p class="muted small">브라우저는 보안상 폴더 위치를 기억할 수 없어서, 다시 로그인하면 같은 WAV 폴더를 한 번 다시 선택해야 합니다. 라벨·메모·이력은 그대로 이어집니다. 크롬 또는 엣지를 권장합니다.</p>
+  <p class="muted small">상태(미작업 · 작업 중 · 검수 완료)는 파일 이름 옆 버튼으로 언제든 바꾸고 저장하면 됩니다. 브라우저는 보안상 폴더 위치를 기억할 수 없어서, 다시 로그인하면 같은 WAV 폴더를 한 번 다시 선택해야 합니다. 크롬 또는 엣지를 권장합니다.</p>
   <div class="row end"><button type="button" data-close>닫기</button></div>
 </dialog>
 <div id="toast" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 "use strict";
 /* ============================================================================
-   Beep Labeler (web). Everything runs in this browser: WAV decoding, beep
-   detection, labels and history (IndexedDB), Excel export/merge. Nothing is uploaded.
-   The Excel layout matches the desktop (Python) version, so files from both merge.
+   Beep Labeler (web). Everything runs in this browser: WAV decoding, labels and
+   saved checkpoints (IndexedDB), Excel/CSV export, Excel merge, clip cutting.
+   Nothing is uploaded. Labels change only when the user presses 저장.
    ========================================================================== */
-const VERSION = "web-0.6.0";
+const VERSION = "web-0.7.0";
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -277,21 +305,23 @@ const r6 = (x) => Math.round(x * 1e6) / 1e6;
 const fl2 = (x) => (Math.floor(x * 100 + 1e-6) / 100).toFixed(2);           // 1.245 s -> "1.24"
 const regionText = (s, e) => (s == null ? "비프 없음" : `${fl2(s)}~${fl2(e)}초`);
 const rint = (x) => { const f = Math.floor(x), d = x - f; return d > 0.5 ? f + 1 : d < 0.5 ? f : (f % 2 === 0 ? f : f + 1); }; // numpy-style round-half-even
+const STATUS_NAME = { none: "미작업", draft: "작업 중", reviewed: "검수 완료" };
 let toastT;
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 3200); }
-function ask(title, text, yes = "확인") {
+/** In-page confirm (the viewer blocks window.confirm). Resolves "yes", "alt" or false. */
+function ask(title, text, yes = "확인", alt = null) {
   return new Promise((ok) => {
     $("cf-title").textContent = title; $("cf-text").textContent = text; $("cf-yes").textContent = yes;
-    const d = $("dlg-confirm");
-    const done = (v) => { d.close(); ok(v); };
-    $("cf-yes").onclick = () => done(true); $("cf-no").onclick = () => done(false); d.oncancel = () => ok(false);
+    $("cf-alt").hidden = !alt; if (alt) $("cf-alt").textContent = alt;
+    const d = $("dlg-confirm"), done = (v) => { d.close(); ok(v); };
+    $("cf-yes").onclick = () => done("yes"); $("cf-alt").onclick = () => done("alt"); $("cf-no").onclick = () => done(false); d.oncancel = () => ok(false);
     d.showModal();
   });
 }
 document.querySelectorAll("dialog [data-close]").forEach((b) => (b.onclick = () => b.closest("dialog").close()));
 
 /* ============================== storage ============================== */
-const MAX_MS = 100, FRAME_MS = 100, AGREE_TOL_MS = 20;
+const FRAME_MS = 100, AGREE_TOL_MS = 20;
 const Store = (() => {
   let db = null, mem = null;
   const open = () => new Promise((ok) => {
@@ -325,6 +355,7 @@ const Store = (() => {
   };
 })();
 const lkey = (uid, folder, file) => `${uid}\u0001${folder}\u0001${file}`;
+const labelStatus = (l) => (l ? l.status || (l.reviewed ? "reviewed" : "draft") : "none");
 
 async function getUser(uid) { return Store.get("users", uid); }
 async function putUser(u) { u.key = u.id; await Store.put("users", u); }
@@ -333,25 +364,24 @@ async function log(uid, action, { dataset = null, file = null, before = null, af
 }
 async function myAudit(uid) { return (await Store.byUser("audit", uid)).sort((a, b) => a.id - b.id); }
 
-/** Upsert a label; writes one history row per kind of change (same rules as the desktop app). */
-async function saveLabel(uid, folder, file, f) {
-  const key = lkey(uid, folder, file), t = now();
-  const old = await Store.get("labels", key);
-  const acts = [];
-  const txt = regionText(f.start_s, f.end_s);
-  if (!old) acts.push([f.start_sample != null ? "구간 지정" : "비프 없음 지정", null, txt]);
-  else if (old.start_sample !== f.start_sample || old.end_sample !== f.end_sample) {
-    const act = f.start_sample == null ? "구간 삭제(비프 없음)" : old.start_sample == null ? "구간 지정" : "구간 수정";
-    acts.push([act, regionText(old.start_s, old.end_s), txt]);
-  }
-  if (old && (old.memo || "") !== (f.memo || "")) acts.push(["메모 수정", old.memo || "", f.memo || ""]);
-  else if (!old && f.memo) acts.push(["메모 작성", "", f.memo]);
-  if (!!(old && old.reviewed) !== !!f.reviewed) acts.push([f.reviewed ? "검수 완료" : "검수 취소", null, txt]);
-  const rec = { ...(old || { created_at: t, n_edits: 0 }), key, dataset: folder, file, user_id: uid, ...f,
-    reviewed: f.reviewed ? 1 : 0, n_edits: (old ? old.n_edits : 0) + acts.length, updated_at: acts.length || !old ? t : old.updated_at };
-  if (!old || acts.length) await Store.put("labels", rec);
-  for (const [a, b, c] of acts) await log(uid, a, { dataset: folder, file, before: b, after: c });
-  return { label: rec, actions: acts.map((a) => a[0]) };
+/** Checkpoint save: writes the label and ONE history row listing what changed since the last save.
+ *  Returns null when nothing changed. A file saved as 미작업 with no region and no memo is removed. */
+async function commitLabel(uid, folder, file, f) {
+  const key = lkey(uid, folder, file), t = now(), old = await Store.get("labels", key);
+  const oldReg = old ? regionText(old.start_s, old.end_s).replace("비프 없음", "없음") : "없음";
+  const newReg = regionText(f.start_s, f.end_s).replace("비프 없음", "없음");
+  const oldSt = STATUS_NAME[labelStatus(old)], newSt = STATUS_NAME[f.status];
+  const before = [], after = [], what = [];
+  if (oldReg !== newReg) { before.push(`구간: ${oldReg}`); after.push(`구간: ${newReg}`); what.push("구간"); }
+  if (oldSt !== newSt) { before.push(`상태: ${oldSt}`); after.push(`상태: ${newSt}`); what.push("상태"); }
+  if ((old?.memo || "") !== (f.memo || "")) { before.push(`메모: ${old?.memo || "(없음)"}`); after.push(`메모: ${f.memo || "(없음)"}`); what.push("메모"); }
+  if (!what.length) return null;
+  const empty = f.status === "none" && f.start_sample == null && !f.memo;
+  let rec = null;
+  if (empty) { if (old) await Store.del("labels", key); }
+  else { rec = { ...(old || { created_at: t }), key, dataset: folder, file, user_id: uid, ...f, reviewed: f.status === "reviewed" ? 1 : 0, updated_at: t }; await Store.put("labels", rec); }
+  await log(uid, "저장", { dataset: folder, file, before: before.join("\n"), after: after.join("\n"), detail: what.join("·") + " 변경" });
+  return { label: rec };
 }
 
 /* ============================== audio ============================== */
@@ -390,7 +420,24 @@ function decodeWav(buf) {
   }
   const mono = new Float64Array(n);
   for (const c of chans) for (let i = 0; i < n; i++) mono[i] += c[i] / h.ch;
-  return { sr: h.sr, n, chans, mono, subtype: h.tag === 3 ? `FLOAT${h.bits}` : `PCM_${h.bits}` };
+  return { sr: h.sr, n, chans, mono, tag: h.tag, bits: h.bits };
+}
+/** Encode a slice as WAV in the source's own sample format (8-bit and 64-bit float become 16-bit / 32-bit float). */
+function encodeWav(chans, sr, tag, bits, s, e) {
+  const float = tag === 3, B = float ? 4 : bits === 8 ? 2 : bits / 8, outBits = B * 8, ch = chans.length, n = e - s;
+  const buf = new ArrayBuffer(44 + n * ch * B), v = new DataView(buf), w = (o, t) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  w(0, "RIFF"); v.setUint32(4, 36 + n * ch * B, true); w(8, "WAVE"); w(12, "fmt "); v.setUint32(16, 16, true);
+  v.setUint16(20, float ? 3 : 1, true); v.setUint16(22, ch, true); v.setUint32(24, sr, true); v.setUint32(28, sr * ch * B, true);
+  v.setUint16(32, ch * B, true); v.setUint16(34, outBits, true); w(36, "data"); v.setUint32(40, n * ch * B, true);
+  let p = 44;
+  for (let i = s; i < e; i++) for (let c = 0; c < ch; c++, p += B) {
+    const x = Math.max(-1, Math.min(1, chans[c][i]));
+    if (float) v.setFloat32(p, chans[c][i], true);
+    else if (B === 2) v.setInt16(p, Math.round(x * 32767), true);
+    else if (B === 3) { const t = Math.round(x * 8388607); v.setUint8(p, t & 255); v.setUint8(p + 1, (t >> 8) & 255); v.setUint8(p + 2, (t >> 16) & 255); }
+    else v.setInt32(p, Math.round(x * 2147483647), true);
+  }
+  return buf;
 }
 async function wavInfo(file) {
   const h = parseWav(await file.slice(0, Math.min(file.size, 1 << 20)).arrayBuffer());
@@ -408,145 +455,27 @@ function frameBounds(n, sr) {
   if (edges[edges.length - 1] < n) edges.push(n);
   return { starts: edges.slice(0, -1), ends: edges.slice(1) };
 }
-const maxLenOf = (sr) => rint(sr * MAX_MS / 1000);
 
-/* ============================== DSP ============================== */
+/* ============================== spectrogram ============================== */
 const twCache = new Map();
-function fft(re, im, inverse = false) {  // in-place radix-2
+function fft(re, im) {  // in-place radix-2
   const n = re.length;
   for (let i = 1, j = 0; i < n; i++) { let b = n >> 1; for (; j & b; b >>= 1) j ^= b; j ^= b; if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; } }
   let tw = twCache.get(n);
   if (!tw) { tw = { c: new Float64Array(n / 2), s: new Float64Array(n / 2) }; for (let k = 0; k < n / 2; k++) { tw.c[k] = Math.cos(2 * Math.PI * k / n); tw.s[k] = Math.sin(2 * Math.PI * k / n); } twCache.set(n, tw); }
-  const sg = inverse ? 1 : -1;
   for (let len = 2; len <= n; len <<= 1) {
     const half = len >> 1, st = n / len;
     for (let i = 0; i < n; i += len) for (let k = 0; k < half; k++) {
-      const wr = tw.c[k * st], wi = sg * tw.s[k * st], a = i + k, b = a + half;
+      const wr = tw.c[k * st], wi = -tw.s[k * st], a = i + k, b = a + half;
       const xr = re[b] * wr - im[b] * wi, xi = re[b] * wi + im[b] * wr;
       re[b] = re[a] - xr; im[b] = im[a] - xi; re[a] += xr; im[a] += xi;
     }
   }
-  if (inverse) for (let i = 0; i < n; i++) { re[i] /= n; im[i] /= n; }
 }
-const nextPow2 = (x) => 1 << Math.ceil(Math.log2(x));
-function smooth1(x, k) {  // centred moving average, edge replication
-  const n = x.length; if (k <= 1 || !n) return x;
-  const L = k >> 1, out = new Float64Array(n), c = new Float64Array(n + k);
-  const at = (i) => x[Math.min(n - 1, Math.max(0, i))];
-  let s = 0; c[0] = 0; for (let i = 0; i < n + k - 1; i++) { s += at(i - L); c[i + 1] = s; }
-  for (let i = 0; i < n; i++) out[i] = (c[i + k] - c[i]) / k;
-  return out;
-}
-function percentile(arr, q) {  // numpy linear interpolation
+function percentile(arr, q) {
   const a = Float64Array.from(arr).sort(); if (!a.length) return NaN;
   const pos = (q / 100) * (a.length - 1), lo = Math.floor(pos), hi = Math.ceil(pos);
   return a[lo] + (a[hi] - a[lo]) * (pos - lo);
-}
-const CFG = { fmin: 400, fmax: 8000, win_ms: 40, hop_ms: 5, smooth_time_ms: 20, smooth_freq_bins: 3, noise_pct: 25,
-  prom_half_hz: 400, peak_hi: 15, peak_lo: 12, prom_hi: 15, prom_lo: 10, min_event_ms: 30, merge_gap_ms: 20,
-  refine_drop_db: 15, refine_min_bw: 150, refine_rel_bw: 0.08 };
-const CFG_DIGEST = "web-" + VERSION;
-
-function computeFeatures(y, sr) {
-  const n = y.length, win = Math.max(16, rint(sr * CFG.win_ms / 1000)), nfft = nextPow2(win), hop = Math.max(1, rint(sr * CFG.hop_ms / 1000));
-  const T = n > 0 ? 1 + Math.floor((n - 1) / hop) : 0, padL = win >> 1;
-  const w = new Float64Array(win); for (let i = 0; i < win; i++) w[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (win - 1));
-  const fmax = Math.min(CFG.fmax, 0.98 * sr / 2), bins = [];
-  for (let k = 0; k <= nfft / 2; k++) { const f = k * sr / nfft; if (f >= CFG.fmin && f <= fmax) bins.push(k); }
-  if (bins.length < 3) throw new Error("샘플레이트가 너무 낮아 비프 대역을 분석할 수 없습니다");
-  const B = bins.length, spec = new Float64Array(T * B), re = new Float64Array(nfft), im = new Float64Array(nfft);
-  for (let t = 0; t < T; t++) {
-    re.fill(0); im.fill(0);
-    const s0 = t * hop - padL;
-    for (let i = 0; i < win; i++) { const j = s0 + i; if (j >= 0 && j < n) re[i] = y[j] * w[i]; }
-    fft(re, im);
-    for (let b = 0; b < B; b++) { const k = bins[b]; spec[t * B + b] = re[k] * re[k] + im[k] * im[k]; }
-  }
-  const ts = Math.max(1, rint(CFG.smooth_time_ms / CFG.hop_ms));
-  if (ts > 1) for (let b = 0; b < B; b++) { const col = new Float64Array(T); for (let t = 0; t < T; t++) col[t] = spec[t * B + b]; const sm = smooth1(col, ts); for (let t = 0; t < T; t++) spec[t * B + b] = sm[t]; }
-  if (CFG.smooth_freq_bins > 1) for (let t = 0; t < T; t++) { const sm = smooth1(spec.subarray(t * B, t * B + B), CFG.smooth_freq_bins); spec.set(sm, t * B); }
-  for (let i = 0; i < spec.length; i++) spec[i] = 10 * Math.log10(spec[i] + 1e-12);
-  const bg = new Float64Array(B);
-  for (let b = 0; b < B; b++) { const col = new Float64Array(T); for (let t = 0; t < T; t++) col[t] = spec[t * B + b]; bg[b] = percentile(col, CFG.noise_pct); }
-  const df = sr / nfft, guard = Math.ceil(2 * nfft / win) + (CFG.smooth_freq_bins >> 1) + 1, half = Math.max(guard + 4, rint(CFG.prom_half_hz / df));
-  const peak = new Float64Array(T), prom = new Float64Array(T), peakHz = new Float64Array(T), nb = [];
-  for (let t = 0; t < T; t++) {
-    let ip = 0, pv = -Infinity;
-    for (let b = 0; b < B; b++) { const v = spec[t * B + b] - bg[b]; if (v > pv) { pv = v; ip = b; } }
-    nb.length = 0;
-    for (let o = -half; o <= half; o++) { if (Math.abs(o) <= guard) continue; const b = ip + o; if (b >= 0 && b < B) nb.push(spec[t * B + b] - bg[b]); }
-    peak[t] = pv; prom[t] = nb.length ? pv - percentile(nb, 50) : NaN; peakHz[t] = bins[ip] * sr / nfft;
-  }
-  return { sr, n, hop, T, peak, prom, peakHz };
-}
-function bandEnvelope(x, sr, lo, hi, taper) {
-  const n = x.length, N = nextPow2(n + 4096), re = new Float64Array(N), im = new Float64Array(N);
-  re.set(x); fft(re, im);
-  for (let k = 0; k < N; k++) {
-    let m = 0;
-    if (k >= 1 && k < N / 2) {
-      const f = k * sr / N;
-      if (f >= lo && f <= hi) m = 1;
-      else if (f < lo && f > lo - taper) m = 0.5 + 0.5 * Math.cos(Math.PI * (lo - f) / taper);
-      else if (f > hi && f < hi + taper) m = 0.5 + 0.5 * Math.cos(Math.PI * (f - hi) / taper);
-      m *= 2;
-    }
-    re[k] *= m; im[k] *= m;
-  }
-  fft(re, im, true);
-  const env = new Float64Array(n); for (let i = 0; i < n; i++) env[i] = Math.hypot(re[i], im[i]);
-  return env;
-}
-function mergeEvents(evs, gap) {
-  evs = [...evs].sort((a, b) => a.start - b.start); const out = [];
-  for (const e of evs) {
-    const p = out[out.length - 1];
-    if (p && e.start - p.end <= gap) { const f = [p.f0, e.f0].filter((v) => v != null); out[out.length - 1] = { start: p.start, end: Math.max(p.end, e.end), f0: f.length ? f.reduce((a, b) => a + b) / f.length : null }; }
-    else out.push({ ...e });
-  }
-  return out;
-}
-function refine(y, sr, ev, search) {
-  if (ev.f0 == null) return ev;
-  const n = y.length, bw = Math.max(CFG.refine_min_bw, CFG.refine_rel_bw * ev.f0), lo = ev.f0 - bw / 2, hi = ev.f0 + bw / 2;
-  if (lo <= 20 || hi >= 0.99 * sr / 2) return ev;
-  const a = Math.max(0, ev.start - search), b = Math.min(n, ev.end + search);
-  const ca = Math.max(0, a - Math.floor(0.5 * sr)), cb = Math.min(n, b + Math.floor(0.5 * sr));
-  if (cb - ca < 64) return ev;
-  const env = smooth1(bandEnvelope(y.subarray(ca, cb), sr, lo, hi, bw / 2), Math.max(1, Math.floor(sr * 0.001)));
-  const coreA = ev.start - ca, coreB = ev.end - ca; if (coreB <= coreA) return ev;
-  const core = env.subarray(coreA, coreB), level = percentile(core, 50);
-  const outside = [...env.subarray(0, Math.max(0, coreA - (search >> 1))), ...env.subarray(coreB + (search >> 1))];
-  const noise = outside.length > sr * 0.02 ? percentile(outside, 20) : 0;
-  const thr = Math.max(level * Math.pow(10, -CFG.refine_drop_db / 20), 2 * noise);
-  if (thr >= level) return ev;
-  let anchor = coreA, mx = -Infinity; for (let i = coreA; i < coreB; i++) if (env[i] > mx) { mx = env[i]; anchor = i; }
-  if (!(env[anchor] >= thr)) return ev;
-  const loLim = a - ca, hiLim = b - ca; let s = anchor, e = anchor;
-  while (s > loLim && env[s - 1] >= thr) s--;
-  while (e < hiLim && env[e] >= thr) e++;
-  return { start: s + ca, end: e + ca, f0: ev.f0 };
-}
-function detect(y, sr) {
-  const F = computeFeatures(y, sr), { hop, n, T } = F, evs = [];
-  const strong = (t) => F.peak[t] >= CFG.peak_hi && F.prom[t] >= CFG.prom_hi;
-  const weak = (t) => F.peak[t] >= CFG.peak_lo && F.prom[t] >= CFG.prom_lo;
-  for (let t = 0; t < T;) {
-    if (!weak(t)) { t++; continue; }
-    let e = t; while (e < T && weak(e)) e++;
-    const hz = []; for (let i = t; i < e; i++) if (strong(i)) hz.push(F.peakHz[i]);
-    if (hz.length) evs.push({ start: Math.max(0, t * hop - (hop >> 1)), end: Math.min(n, (e - 1) * hop + hop - (hop >> 1)), f0: percentile(hz, 50) });
-    t = e;
-  }
-  const gap = rint(sr * CFG.merge_gap_ms / 1000), search = rint(sr * CFG.win_ms / 1000), minLen = rint(sr * CFG.min_event_ms / 1000);
-  let out = mergeEvents(evs, gap);
-  out = mergeEvents(out.map((e) => refine(y, sr, e, search)), gap);
-  return out.filter((e) => e.end - e.start >= minLen);
-}
-function suggestRegion(evs, n, sr) {
-  if (!evs.length) return { start_sample: null, end_sample: null, start_s: null, end_s: null };
-  const e = evs.reduce((a, b) => (b.start < a.start ? b : a)), s = Math.max(0, e.start), en = Math.min(e.end, s + maxLenOf(sr), n);
-  return { start_sample: s, end_sample: en, start_s: r6(s / sr), end_s: r6(en / sr) };
 }
 function spectrogram(y, sr) {
   const nfft = sr >= 32000 ? 1024 : 512, hop = Math.max(nfft / 8, Math.ceil(y.length / 4000)), T = Math.max(1, 1 + Math.floor((y.length - 1) / hop));
@@ -564,18 +493,12 @@ function spectrogram(y, sr) {
   for (let i = 0; i < db.length; i++) img[i] = Math.max(0, Math.min(255, ((db[i] - (top - 80)) / 80) * 255));
   return { img, T, K, hop, fmax: (K - 1) * sr / nfft };
 }
-async function autoRegion(sha, y, sr) {
-  const key = sha + "|" + CFG_DIGEST;
-  const c = await Store.get("auto", key); if (c) return c;
-  const r = { key, ...suggestRegion(detect(y, sr), y.length, sr) };
-  await Store.put("auto", r); return r;
-}
 
 /* ============================== state ============================== */
-const S = { me: null, folder: null, files: [], idx: -1, view: null, region: null, reviewed: false, memo: "", hasLabel: false,
-  saved: null, saveTimer: null, saving: null, v0: 0, v1: 1, cursor: 0, hoverX: -1, undo: [], redo: [], big: false, gain: 1,
+const S = { me: null, folder: null, files: [], idx: -1, view: null, region: null, status: "none", memo: "",
+  saved: null, v0: 0, v1: 1, cursor: 0, hoverX: -1, undo: [], redo: [], big: false, gain: 1,
   specImg: null, history: [], histEdit: false, playEnd: null };
-const myLabels = new Map();   // file -> label (current folder, me)
+const myLabels = new Map();   // file -> saved label (current folder, me)
 
 /* ============================== theme ============================== */
 let C = {};
@@ -613,7 +536,7 @@ $("login-form").onsubmit = async (ev) => {
   await startApp(u);
 };
 async function logout() {
-  await flushSave();
+  if (isDirty()) await save();                       // "저장 후 로그아웃"
   if (S.me) await log(S.me.id, "저장 후 로그아웃");
   try { localStorage.removeItem("bl-session"); } catch (e) {}
   S.me = null; S.view = null; S.idx = -1; S.files = []; S.folder = null; myLabels.clear();
@@ -632,16 +555,22 @@ async function startApp(u) {
   if (Store.volatile) toast("이 브라우저에서 저장소를 쓸 수 없어 기록이 저장되지 않습니다. 작업 후 꼭 엑셀로 내보내세요.");
 }
 function showEmpty(msg) {
-  const e = $("empty");
-  const has = !!S.view;
-  e.hidden = has; $("wrap").hidden = !has; $("region-bar").hidden = !has;
+  const e = $("empty"), has = !!S.view;
+  e.hidden = has; $("wrap").hidden = !has; $("region-bar").hidden = !has; $("status-seg").hidden = !has;
   if (!has) e.innerHTML = msg || (S.files.length ? "왼쪽에서 파일을 고르세요."
     : `<b>WAV 폴더를 선택하세요.</b> 왼쪽 위 <b>📁 WAV 폴더 선택</b>을 누르거나 폴더를 끌어다 놓으세요. 내 PC 폴더나 NAS 폴더 모두 됩니다.` +
       (S.me?.folder_name ? `<br>지난번에 작업한 폴더: <code>${esc(S.me.folder_name)}</code> — 같은 폴더를 다시 선택하면 이전 작업이 이어집니다.` : ""));
 }
+/** Before leaving a file with unsaved edits: 저장 / 저장 안 함 / 취소. Returns false to stay. */
+async function confirmLeave() {
+  if (!isDirty()) return true;
+  const a = await ask("저장하지 않은 변경", `${S.files[S.idx].rel}\n저장하지 않은 변경이 있습니다. 저장할까요?\n(저장하지 않으면 마지막으로 저장한 상태로 돌아갑니다)`, "저장", "저장 안 함");
+  if (a === "yes") { await save(); return true; }
+  return a === "alt";
+}
 
 /* ============================== folder ============================== */
-$("btn-folder").onclick = () => $("folder-input").click();
+$("btn-folder").onclick = async () => { if (await confirmLeave()) $("folder-input").click(); };
 $("folder-input").onchange = () => { const fs = [...$("folder-input").files]; $("folder-input").value = ""; loadFolder(fs.map((f) => ({ file: f, path: f.webkitRelativePath || f.name }))); };
 const drop = $("drop");
 drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
@@ -654,10 +583,11 @@ drop.ondrop = async (e) => {
     else { const r = ent.createReader(), all = []; const next = () => r.readEntries(async (es) => { if (!es.length) { for (const x of all) await walk(x, p + ent.name + "/"); ok(); } else { all.push(...es); next(); } }, () => ok()); next(); }
   });
   for (const it of items) await walk(it, "");
-  loadFolder(out);
+  if (await confirmLeave()) loadFolder(out);
 };
+async function reloadMyLabels() { myLabels.clear(); for (const l of await Store.byUser("labels", S.me.id)) if (l.dataset === S.folder) myLabels.set(l.file, l); }
 async function loadFolder(entries) {
-  await flushSave(); stop();
+  stop();
   const wav = entries.filter((x) => /\.wav$/i.test(x.path));
   if (!wav.length) { toast("WAV 파일이 없는 폴더입니다."); return; }
   const root = wav[0].path.includes("/") ? wav[0].path.split("/")[0] : "(선택한 파일)";
@@ -665,22 +595,21 @@ async function loadFolder(entries) {
     .filter((f) => !f.rel.split("/").some((p) => p.startsWith(".")))
     .sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
   const prev = S.me.folder_name;
-  S.folder = root; S.files = files; S.idx = -1; S.view = null;
+  S.folder = root; S.files = files; S.idx = -1; S.view = null; S.saved = null;
   if (prev !== root) { await log(S.me.id, "데이터 폴더 변경", { before: prev, after: root, detail: `WAV ${files.length}개` }); S.me.folder_name = root; await putUser(S.me); }
   if (prev && prev !== root) toast(`지난번 폴더(${prev})와 이름이 다릅니다. 기록은 폴더 이름별로 따로 저장됩니다.`);
-  myLabels.clear();
-  for (const l of await Store.byUser("labels", S.me.id)) if (l.dataset === root) myLabels.set(l.file, l);
+  await reloadMyLabels();
   $("folder-label").textContent = `📁 ${root} (${files.length}개)`; $("last-folder").textContent = "";
   renderFiles(); showEmpty();
   const last = files.findIndex((f) => f.rel === S.me.last_file);
-  const first = last >= 0 ? last : Math.max(0, files.findIndex((f) => !(myLabels.get(f.rel)?.reviewed)));
-  openFile(first);
+  const first = last >= 0 ? last : Math.max(0, files.findIndex((f) => statusOf(f.rel) !== "reviewed"));
+  openFile(first, true);
   for (const f of files) { try { f.info = await wavInfo(f.file); } catch (e) { f.info = { error: e.message }; } }
   renderFiles();
 }
 
 /* ============================== file list ============================== */
-function statusOf(rel) { const l = myLabels.get(rel); return l ? (l.reviewed ? "reviewed" : "draft") : "none"; }
+const statusOf = (rel) => labelStatus(myLabels.get(rel));
 function renderFiles() {
   const q = $("filter").value.toLowerCase(), sf = $("status-filter").value, ul = $("files");
   ul.innerHTML = "";
@@ -692,7 +621,7 @@ function renderFiles() {
     li.dataset.idx = i; li.className = i === S.idx ? "active" : "";
     const dur = f.info && !f.info.error ? (f.info.n / f.info.sr).toFixed(1) + "s" : f.info?.error ? "⚠" : "";
     li.innerHTML = `<span class="dot ${st}"></span><span class="name" title="${esc(f.rel)}">${esc(f.rel)}</span><span class="dur">${dur}</span>` +
-      (l ? `<span class="reg">${esc(regionText(l.start_s, l.end_s))}</span>` : "");
+      (l && (l.start_s != null || st === "reviewed") ? `<span class="reg">${esc(regionText(l.start_s, l.end_s))}</span>` : "");
     li.onclick = () => openFile(i); ul.appendChild(li);
   });
   const done = S.files.filter((f) => statusOf(f.rel) === "reviewed").length;
@@ -717,7 +646,6 @@ const xOf = (s) => ((s - S.v0) / (S.v1 - S.v0)) * W;
 const sOf = (x) => Math.round(S.v0 + (x / W) * (S.v1 - S.v0));
 const clampS = (s) => Math.max(0, Math.min(nS(), s));
 const msOf = (n) => 1000 * n / S.view.sr;
-const maxLen = () => maxLenOf(S.view.sr);
 const regionAt = (y) => Object.keys(P).find((k) => y >= P[k][0] && y < P[k][1]) || null;
 function lowerBound(a, v) { let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < v) lo = m + 1; else hi = m; } return lo; }
 const nF = () => S.view.fb.starts.length;
@@ -727,8 +655,8 @@ function boundary(k) { return k < nF() ? S.view.fb.starts[k] : S.view.fb.ends[nF
 const step10 = () => S.view.sr / 100;
 const toGrid = (s) => Math.max(0, Math.min(nS(), rint(Math.floor(s / step10() + 1e-9) * step10())));
 const gridSec = (s) => Math.floor(s / step10() + 1e-6) / 100;
-function regText(r) { if (!r) return S.hasLabel || S.reviewed ? "비프 없음" : "지정 안 됨"; return `${gridSec(r[0]).toFixed(2)} ~ ${gridSec(r[1]).toFixed(2)}초`; }
-function centered(c) { const L = Math.min(maxLen(), nS()), s0 = toGrid(Math.max(0, Math.min(nS() - L, c - L / 2))); return [s0, Math.min(nS(), rint(s0 + L))]; }
+function regText(r) { if (!r) return S.status === "reviewed" ? "비프 없음" : "지정 안 됨"; return `${gridSec(r[0]).toFixed(2)} ~ ${gridSec(r[1]).toFixed(2)}초`; }
+function centered(c) { const L = Math.min(rint(S.view.sr * 0.1), nS()), s0 = toGrid(Math.max(0, Math.min(nS() - L, c - L / 2))); return [s0, Math.min(nS(), rint(s0 + L))]; }
 function minSpan(r) { const st = Math.max(1, rint(step10())); if (r[1] - r[0] < st) { if (r[0] + st <= nS()) r[1] = r[0] + st; else r[0] = Math.max(0, r[1] - st); } return r; }
 
 const LUT = (() => {
@@ -783,7 +711,6 @@ function draw() {
   ctx.fillStyle = C.text; ctx.strokeStyle = C.grid; ctx.font = "10px 'IBM Plex Mono', monospace";
   for (let t = Math.ceil(S.v0 / V.sr / tick - 1e-9) * tick; t <= S.v1 / V.sr + 1e-9; t += tick) { const x = xOf(t * V.sr); ctx.beginPath(); ctx.moveTo(x, ay0); ctx.lineTo(x, ay0 + 5); ctx.stroke(); ctx.fillText(tick < 1 ? t.toFixed(1) + "s" : t.toFixed(0) + "s", x + 2, ay0 + 15); }
   const vline = (x, c, w = 1) => { ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, fy1); ctx.stroke(); ctx.lineWidth = 1; };
-  vline(xOf(S.cursor) + 0.5, C.cursor);
   if (A.playing) vline(xOf(A.pos() * V.sr), C.play, 2);
   if (S.hoverX >= 0) vline(S.hoverX + 0.5, C.auto);
 }
@@ -792,15 +719,18 @@ function draw() {
 function refreshPanels() {
   if (!S.view) return;
   $("region-text").textContent = regText(S.region);
-  $("region-detail").textContent = S.region ? `길이 ${Math.round(msOf(S.region[1] - S.region[0]) / 10) * 10} ms · 샘플 [${S.region[0]}, ${S.region[1]})` : "";
-  $("file-state").innerHTML = S.reviewed ? `<span style="color:var(--ok)">● 검수 완료</span>` : S.hasLabel ? `<span style="color:var(--draft)">● 작업 중</span>` : `<span class="muted">○ 미작업</span>`;
-  $("btn-play-seg").disabled = !S.region;
+  $("region-detail").textContent = S.region ? `길이 ${Math.round(msOf(S.region[1] - S.region[0]) / 10) * 10} ms` : "";
+  document.querySelectorAll("#status-seg button").forEach((b) => b.classList.toggle("on", b.dataset.st === S.status));
+  $("btn-play-seg").disabled = !S.region; $("btn-cut").disabled = !S.region;
+  const dirty = isDirty();
+  $("btn-save").classList.toggle("dirty", dirty); $("btn-save").textContent = dirty ? "💾 저장 •" : "💾 저장";
+  if (dirty) setSave("저장하지 않은 변경이 있습니다", true);
   updateStatus();
 }
 function updateStatus() {
   if (!S.view) { $("status").textContent = ""; return; }
-  const s = clampS(S.hoverX >= 0 ? sOf(S.hoverX) : S.cursor), i = frameAt(s);
-  $("status").textContent = `커서 ${(s / S.view.sr).toFixed(3)}s · 100ms 칸 #${i} (${(boundary(i) / S.view.sr).toFixed(1)}–${(boundary(i + 1) / S.view.sr).toFixed(1)}s) · ${S.view.sr} Hz · ${S.view.chans.length}ch`;
+  const s = clampS(S.hoverX >= 0 ? sOf(S.hoverX) : 0), i = frameAt(s);
+  $("status").textContent = `${S.hoverX >= 0 ? `마우스 ${(Math.floor(s / step10() + 1e-6) / 100).toFixed(2)}s · 100ms 칸 #${i} · ` : ""}${S.view.sr} Hz · ${S.view.chans.length}ch · 길이 ${(S.view.n / S.view.sr).toFixed(2)}s`;
 }
 const setSave = (t, warn = false) => { $("save-state").textContent = t; $("save-state").style.color = warn ? "var(--warn)" : ""; };
 
@@ -812,9 +742,12 @@ async function loadHistory() {
 }
 function renderHistory() {
   const ed = S.histEdit; $("hist-tools").hidden = !ed; $("btn-hist-edit").hidden = ed;
-  $("history").innerHTML = S.history.length ? S.history.map((a) =>
-    `<li>${ed ? `<input type="checkbox" class="hc" value="${a.id}" aria-label="이력 선택">` : ""}<div><span class="t">${esc(a.ts)}</span>${esc(a.action)}` +
-    (a.before || a.after ? `: ${a.before ? esc(a.before) + " → " : ""}${esc(a.after || "")}` : "") + `</div></li>`).join("") : `<li class="muted">아직 없음</li>`;
+  $("history").innerHTML = S.history.length ? S.history.map((a) => {
+    const body = a.action === "저장"
+      ? `<div class="chg">${esc(a.before || "").replace(/\n/g, "<br>")}</div><div class="chg to">→ ${esc(a.after || "").replace(/\n/g, "<br>→ ")}</div>`
+      : `${esc(a.action)}${a.before || a.after ? `: ${a.before ? esc(a.before) + " → " : ""}${esc(a.after || "")}` : ""}`;
+    return `<li>${ed ? `<input type="checkbox" class="hc" value="${a.id}" aria-label="기록 선택">` : ""}<div><span class="t">${esc(a.ts)} · ${esc(a.action)}</span>${a.action === "저장" ? body : ""}${a.action !== "저장" ? `<div>${body}</div>` : ""}</div></li>`;
+  }).join("") : `<li class="muted">아직 저장한 기록이 없습니다</li>`;
   $("history").querySelectorAll(".hc").forEach((c) => (c.onchange = histCount)); histCount();
 }
 function histCount() {
@@ -830,18 +763,24 @@ $("btn-hist-all").onclick = () => {
 };
 $("btn-hist-del").onclick = async () => {
   const ids = [...$("history").querySelectorAll(".hc:checked")].map((c) => +c.value);
-  if (!ids.length || !(await ask("작업 이력 삭제", `선택한 작업 이력 ${ids.length}건을 삭제할까요?\n되돌릴 수 없고 엑셀·CSV에서도 빠집니다.\n(비프 구간·메모 등 라벨은 바뀌지 않습니다)`, "삭제"))) return;
+  if (!ids.length || !(await ask("저장 기록 삭제", `선택한 기록 ${ids.length}건을 삭제할까요?\n되돌릴 수 없고 엑셀·CSV에서도 빠집니다.\n(비프 구간·메모·상태는 바뀌지 않습니다)`, "삭제"))) return;
   const mine = new Set(S.history.map((h) => h.id));
   for (const id of ids) if (mine.has(id)) await Store.del("audit", id);
-  S.histEdit = false; toast(`작업 이력 ${ids.length}건 삭제됨`); loadHistory();
+  S.histEdit = false; toast(`기록 ${ids.length}건 삭제됨`); loadHistory();
 };
 
 /* ============================== open / save ============================== */
-const stateJSON = () => JSON.stringify({ r: S.region, v: S.reviewed, m: S.memo, h: S.hasLabel });
+const stateJSON = () => JSON.stringify({ r: S.region, s: S.status, m: S.memo });
 const isDirty = () => !!S.view && S.saved !== null && stateJSON() !== S.saved;
-async function openFile(i) {
+function applySaved(l) {
+  S.region = l && l.start_sample != null ? [l.start_sample, l.end_sample] : null;
+  S.status = labelStatus(l); S.memo = l ? l.memo || "" : ""; $("memo").value = S.memo;
+  S.saved = stateJSON();
+}
+async function openFile(i, skipAsk = false) {
   if (i < 0 || i >= S.files.length) return;
-  await flushSave(); stop();
+  if (!skipAsk && i !== S.idx && !(await confirmLeave())) { renderFiles(); return; }
+  stop();
   S.idx = i; renderFiles();
   const f = S.files[i];
   $("file-title").textContent = f.rel; setSave("불러오는 중…");
@@ -850,66 +789,60 @@ async function openFile(i) {
     const buf = await f.file.arrayBuffer();
     const d = decodeWav(buf), sha = await sha256hex(buf), fb = frameBounds(d.n, d.sr);
     const step = Math.max(1, Math.ceil(d.n / 20000)), nb = Math.floor(d.n / step), mn = new Float32Array(nb), mx = new Float32Array(nb);
-    for (let b = 0; b < nb; b++) { let lo = 1, hi = -1; for (let j = b * step; j < (b + 1) * step; j++) { const v = d.mono[j]; if (v < lo) lo = v; if (v > hi) hi = v; } mn[b] = lo; mx[b] = hi; }
-    V = { file: f.rel, sr: d.sr, n: d.n, chans: d.chans, mono: d.mono, sha, fb, subtype: d.subtype, wave: { step, min: mn, max: mx }, peak: Math.max(1e-6, ...mx.map(Math.abs), ...mn.map(Math.abs)), spec: spectrogram(d.mono, d.sr), auto: null };
+    let peak = 1e-6;
+    for (let b = 0; b < nb; b++) { let lo = 1, hi = -1; for (let j = b * step; j < (b + 1) * step; j++) { const v = d.mono[j]; if (v < lo) lo = v; if (v > hi) hi = v; } mn[b] = lo; mx[b] = hi; peak = Math.max(peak, -lo, hi); }
+    V = { file: f.rel, sr: d.sr, n: d.n, chans: d.chans, mono: d.mono, sha, fb, tag: d.tag, bits: d.bits, wave: { step, min: mn, max: mx }, peak, spec: spectrogram(d.mono, d.sr) };
     f.info = { sr: d.sr, n: d.n, ch: d.chans.length };
-  } catch (e) { S.view = null; showEmpty(`<b>${esc(f.rel)}</b> 파일을 열 수 없습니다: ${esc(e.message)}`); setSave("열기 실패", true); draw(); return; }
+  } catch (e) { S.view = null; S.saved = null; showEmpty(`<b>${esc(f.rel)}</b> 파일을 열 수 없습니다: ${esc(e.message)}`); setSave("열기 실패", true); draw(); return; }
   if (S.idx !== i) return;
   S.view = V; S.undo = []; S.redo = []; S.histEdit = false; A.buffer = null;
   const l = myLabels.get(f.rel);
-  S.hasLabel = !!l; S.region = l && l.start_sample != null ? [l.start_sample, l.end_sample] : null;
-  S.reviewed = !!(l && l.reviewed); S.memo = l ? l.memo : ""; $("memo").value = S.memo;
-  S.saved = stateJSON(); S.v0 = 0; S.v1 = V.n; S.cursor = 0;
+  applySaved(l);
+  S.v0 = 0; S.v1 = V.n; S.cursor = 0;
   buildSpecImage(); showEmpty(); resize(); refreshPanels();
-  setSave(l ? `마지막 저장 ${l.updated_at}` : "아직 저장된 라벨 없음");
+  setSave(l ? `마지막 저장 ${l.updated_at}` : "아직 저장한 적 없음");
   $("files").querySelector("li.active")?.scrollIntoView({ block: "nearest" });
   S.me.last_file = f.rel; putUser(S.me);
   loadHistory();
-  setTimeout(async () => {  // detection after first paint
-    try { const a = await autoRegion(V.sha, V.mono, V.sr); if (S.view === V) { V.auto = a; refreshPanels(); draw(); } }
-    catch (e) { if (S.view === V) { V.auto = { start_sample: null }; } }
-  }, 30);
 }
-function scheduleSave() { clearTimeout(S.saveTimer); if (!isDirty()) return; setSave("변경됨 · 자동 저장 대기…"); S.saveTimer = setTimeout(save, 700); }
-async function flushSave() { clearTimeout(S.saveTimer); if (S.saving) await S.saving; if (isDirty()) await save(); }
+/** 저장 = checkpoint. Only here do labels change and a history row get written. */
 async function save() {
   if (!S.view || S.idx < 0) return;
-  clearTimeout(S.saveTimer);
-  const snap = stateJSON(), V = S.view, rel = S.files[S.idx].rel, reg = S.region;
-  S.saving = (async () => {
-    const r = await saveLabel(S.me.id, S.folder, rel, {
-      start_sample: reg ? reg[0] : null, end_sample: reg ? reg[1] : null, start_s: reg ? Math.floor(reg[0] * 100 / V.sr + 1e-6) / 100 : null, end_s: reg ? Math.floor(reg[1] * 100 / V.sr + 1e-6) / 100 : null,
-      reviewed: S.reviewed, memo: S.memo, sample_rate: V.sr, num_samples: V.n, sha256: V.sha,
-      file_duration_s: Math.round(V.n / V.sr * 1000) / 1000, auto: V.auto && V.auto.start_sample !== undefined ? { start_s: V.auto.start_s, end_s: V.auto.end_s } : null });
-    myLabels.set(rel, r.label);
-    if (S.view === V) { S.saved = snap; S.hasLabel = true; setSave(`저장됨 ${r.label.updated_at} (${S.me.id})`); refreshPanels(); if (r.actions.length) loadHistory(); }
+  const V = S.view, rel = S.files[S.idx].rel, reg = S.region;
+  try {
+    const r = await commitLabel(S.me.id, S.folder, rel, {
+      status: S.status, start_sample: reg ? reg[0] : null, end_sample: reg ? reg[1] : null,
+      start_s: reg ? Math.floor(reg[0] * 100 / V.sr + 1e-6) / 100 : null, end_s: reg ? Math.floor(reg[1] * 100 / V.sr + 1e-6) / 100 : null,
+      memo: S.memo, sample_rate: V.sr, num_samples: V.n, sha256: V.sha, file_duration_s: Math.round(V.n / V.sr * 1000) / 1000 });
+    if (!r) { S.saved = stateJSON(); refreshPanels(); setSave("바뀐 내용이 없습니다"); return; }
+    if (r.label) myLabels.set(rel, r.label); else myLabels.delete(rel);
+    if (S.view === V) { S.saved = stateJSON(); refreshPanels(); setSave(`저장됨 ${now()} (${S.me.id})`); loadHistory(); }
     renderFiles();
-  })().catch((e) => setSave("저장 실패: " + e.message, true)).finally(() => { S.saving = null; if (isDirty()) scheduleSave(); });
-  return S.saving;
+  } catch (e) { setSave("저장 실패: " + e.message, true); }
 }
-window.addEventListener("beforeunload", (e) => { if (isDirty()) { save(); e.preventDefault(); e.returnValue = ""; } });
-document.addEventListener("visibilitychange", () => { if (document.hidden) flushSave(); });
+window.addEventListener("beforeunload", (e) => { if (isDirty()) { e.preventDefault(); e.returnValue = ""; } });
 
 /* ============================== editing ============================== */
 const snapshot = () => JSON.stringify(S.region);
 function pushUndo() { S.undo.push(snapshot()); if (S.undo.length > 200) S.undo.shift(); S.redo = []; }
-function changed() { S.hasLabel = true; refreshPanels(); draw(); scheduleSave(); }
+function changed() { if (S.status === "none") S.status = "draft"; refreshPanels(); draw(); }
 const undo = () => { if (S.undo.length) { S.redo.push(snapshot()); S.region = JSON.parse(S.undo.pop()); changed(); } };
 const redo = () => { if (S.redo.length) { S.undo.push(snapshot()); S.region = JSON.parse(S.redo.pop()); changed(); } };
 function shift(which, dMs) {
   if (!S.region) return; pushUndo();
-  const d = Math.round(dMs * S.view.sr / 1000), r = [...S.region];
-  const st = Math.max(1, rint(step10()));
+  const d = Math.round(dMs * S.view.sr / 1000), r = [...S.region], st = Math.max(1, rint(step10()));
   if (which === 0) r[0] = toGrid(Math.max(0, Math.min(r[1] - st, r[0] + d))); else r[1] = Math.min(nS(), Math.max(r[0] + st, toGrid(r[1] + d)));
   S.region = r; changed();
 }
+function setStatus(st) { if (!S.view) return; S.status = st; refreshPanels(); }
+document.querySelectorAll("#status-seg button").forEach((b) => (b.onclick = () => setStatus(b.dataset.st)));
 let drag = null;
 cv.addEventListener("contextmenu", (e) => e.preventDefault());
 cv.addEventListener("pointerdown", (ev) => {
   if (!S.view || ev.button !== 0) return;
   const r = cv.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top, rg = regionAt(y);
   cv.setPointerCapture(ev.pointerId);
-  if (rg === "axis" || !rg) { S.cursor = clampS(sOf(x)); seekIfPlaying(); draw(); updateStatus(); return; }
+  if (rg === "axis" || !rg) return;
   const snap = snapshot();
   if (S.region) {
     const xa = xOf(S.region[0]), xb = xOf(S.region[1]), tol = ev.pointerType === "touch" ? 14 : 6;
@@ -939,7 +872,7 @@ cv.addEventListener("pointermove", (ev) => {
 cv.addEventListener("pointerleave", () => { if (!drag) { S.hoverX = -1; draw(); updateStatus(); } });
 cv.addEventListener("pointerup", () => {
   if (!drag) return;
-  if (!drag.moved && drag.mode !== "edge") { S.region = centered(sOf(drag.x0)); S.cursor = S.region[0]; }
+  if (!drag.moved && drag.mode !== "edge") S.region = centered(sOf(drag.x0));
   if (snapshot() !== drag.snap) { S.undo.push(drag.snap); S.redo = []; changed(); }
   drag = null; refreshPanels(); draw();
 });
@@ -975,7 +908,6 @@ function play(from, to = null) {
 function stop(redraw = true) { if (A.src) { A.src.onended = null; try { A.src.stop(); } catch (e) {} A.src = null; } A.playing = false; S.playEnd = null; if (redraw) tick(); }
 function playAll() { if (!S.view) return; if (A.playing && S.playEnd == null) { stop(); return; } play(0); }  // whole file, start to end
 function playSeg() { if (!S.region) return; if (A.playing && S.playEnd != null) { stop(); return; } play(S.region[0], S.region[1]); }
-function seekIfPlaying() {}
 function tick() {
   $("btn-play-all").classList.toggle("on", A.playing && S.playEnd == null); $("btn-play-seg").classList.toggle("on", A.playing && S.playEnd != null);
   if (!A.playing || !S.view) { draw(); return; }
@@ -986,8 +918,8 @@ function tick() {
 /* ============================== keys & buttons ============================== */
 function nextFile(d) { const vis = [...$("files").querySelectorAll("li")].map((li) => +li.dataset.idx), p = vis.indexOf(S.idx), t = p < 0 ? vis[0] : vis[p + d]; if (t !== undefined) openFile(t); }
 async function reviewNext() {
-  if (!S.region && !(await ask("비프 없음으로 검수", "비프 구간을 지정하지 않았습니다. 이 파일을 '비프 없음'으로 검수 완료할까요?", "검수 완료"))) return;
-  S.hasLabel = true; S.reviewed = true; refreshPanels(); await save(); nextFile(1);
+  if (!S.region && (await ask("비프 없음으로 검수", "비프 구간을 지정하지 않았습니다. 이 파일을 '비프 없음'으로 검수 완료할까요?", "검수 완료")) !== "yes") return;
+  S.status = "reviewed"; refreshPanels(); await save(); nextFile(1);
 }
 function toggleBig() { S.big = !S.big; $("wrap").classList.toggle("big", S.big); $("btn-big").textContent = S.big ? "스펙트로그램 작게 보기" : "스펙트로그램 크게 보기"; $("btn-big").classList.toggle("on", S.big); }
 window.addEventListener("keydown", async (ev) => {
@@ -1000,17 +932,15 @@ window.addEventListener("keydown", async (ev) => {
   const m = { Space: playAll, Enter: playSeg, Escape: () => stop(),
     BracketLeft: () => shift(0, -st), BracketRight: () => shift(0, st), Semicolon: () => shift(1, -st), Quote: () => shift(1, st),
     Equal: () => zoom(0.5), Minus: () => zoom(2), KeyF: () => setView(0, nS()), KeyB: toggleBig, KeyT: toggleTheme, KeyR: reviewNext,
-    KeyN: () => nextFile(1), ArrowDown: () => nextFile(1), KeyP: () => nextFile(-1), ArrowUp: () => nextFile(-1),
-    ArrowLeft: () => moveCursor(-1), ArrowRight: () => moveCursor(1) };
+    KeyN: () => nextFile(1), ArrowDown: () => nextFile(1), KeyP: () => nextFile(-1), ArrowUp: () => nextFile(-1) };
   if (m[k]) { ev.preventDefault(); m[k](); } else if (ev.key === "?") $("dlg-help").showModal();
 });
-function moveCursor(d) { const j = Math.max(0, Math.min(nF() - 1, frameAt(S.cursor) + d)); S.cursor = S.view.fb.starts[j]; if (S.cursor < S.v0 || S.cursor > S.v1) { const sp = S.v1 - S.v0; setView(S.cursor - sp / 2, S.cursor + sp / 2); } updateStatus(); draw(); }
 const on = (id, fn) => ($(id).onclick = () => { if (S.view) fn(); });
 on("btn-play-all", playAll); on("btn-play-seg", playSeg); $("btn-stop").onclick = () => stop();
 on("btn-zin", () => zoom(0.5)); on("btn-zout", () => zoom(2)); on("btn-fit", () => setView(0, nS())); $("btn-big").onclick = toggleBig;
-on("btn-save", save); on("btn-review", reviewNext);
+on("btn-save", save); on("btn-review", reviewNext); on("btn-cut", cutCurrent);
 $("gain").onchange = (e) => { S.gain = +e.target.value; draw(); };
-$("memo").oninput = () => { if (!S.view) return; S.memo = $("memo").value; S.hasLabel = true; scheduleSave(); };
+$("memo").oninput = () => { if (!S.view) return; S.memo = $("memo").value; if (S.status === "none" && S.memo) S.status = "draft"; refreshPanels(); };
 $("btn-help").onclick = () => $("dlg-help").showModal();
 
 /* ============================== downloads ============================== */
@@ -1022,53 +952,77 @@ async function saveFile(filename, data) {
   catch (e) { if (e?.code !== "declined") toast("저장하지 못했습니다: " + (e?.message || e?.code || e)); return false; }
 }
 
-/* ============================== export ============================== */
-const LABEL_HEADERS = ["번호", "파일", "작업자 ID", "작업자 이름", "상태", "비프 여부", "비프 구간", "시작(초)", "끝(초)", "길이(ms)", "100ms 클립 구간(중심 기준)", "자동탐지 구간",
-  "자동 대비 시작 차이(ms)", "자동 대비 끝 차이(ms)", "메모", "수정 횟수", "최초 작업 일시", "최종 수정 일시", "샘플레이트(Hz)", "파일 길이(초)", "시작 샘플", "끝 샘플", "SHA-256"];
-const LABEL_KEYS = [null, "file", "user_id", "display_name", "status", null, "region", "start_s", "end_s", "duration_ms", "clip_region", "auto_region",
-  "auto_diff_start_ms", "auto_diff_end_ms", "memo", "n_edits", "created_at", "updated_at", "sample_rate", "file_duration_s", "start_sample", "end_sample", "sha256"];
-const AUDIT_HEADERS = ["번호", "일시", "작업자 ID", "작업자 이름", "파일", "동작", "변경 전", "변경 후", "비고"], SOURCE = "출처 파일";
-const ACTION_FILL = { "구간 지정": "DDEBF7", "구간 수정": "FFF2CC", "구간 삭제(비프 없음)": "FCE4D6", "비프 없음 지정": "FCE4D6", "검수 완료": "E2EFDA", "검수 취소": "F8CBAD",
-  "메모 작성": "EDE7F6", "메모 수정": "EDE7F6", "로그인": "F2F2F2", "로그아웃": "F2F2F2", "저장 후 로그아웃": "F2F2F2", "아이디 생성": "F2F2F2", "데이터 폴더 변경": "FFE699", "내보내기": "F2F2F2" };
-const STATUS_FILL = { "검수 완료": "E2EFDA", "작업 중": "FFF2CC", "일치": "E2EFDA", "불일치": "FCE4D6" };
-const RULE_ROWS = [
-  ["라벨 규칙", "샘플(파일)마다 비프 구간은 최대 1개이며 길이 제한은 없습니다. 구간 경계는 10 ms 단위(소수 둘째 자리 초)로 기록합니다. 구간은 오디오를 자르지 않고 표시만 합니다. '비프 없음'은 해당 샘플에 비프가 없다고 작업자가 판단한 것입니다."],
-  ["100ms 클립 구간", "표시한 구간의 중심을 기준으로 양옆 50 ms씩 잡은 100 ms 창입니다 (파일 끝에서는 안쪽으로 밀어서 100 ms 유지). 나중에 100 ms 샘플을 자를 때 사용합니다."],
-  ["작업자 간 일치", "두 작업자 이상이 라벨링한 파일에서 시작·끝 경계 차이가 모두 20 ms 이하면 '일치'."],
-  ["자동탐지", "협대역 톤 검출기가 찾은 첫 비프의 시작점부터 최대 100 ms. 사람이 검수한 결과가 정답입니다."],
-  ["로그인 방식", "아이디만으로 로그인합니다. 작업자 ID는 본인 확인을 거친 값이 아닙니다."]];
-const SHEET_HELP = ["시트 설명", "라벨 결과: 작업자별 최종 구간 / 작업 이력: 누가 언제 무엇을 어떻게 바꿨는지 / 작업자 요약: 작업자별 진행 현황 / 파일 현황: 파일별 작업자 간 일치 여부"];
+/* ============================== cut clips ============================== */
+const clipName = (rel, s, e) => `${rel.replace(/\.wav$/i, "").replace(/[\\/]/g, "__")}__${fl2(s)}-${fl2(e)}s.wav`;
+async function cutCurrent() {
+  if (!S.region) return;
+  if (!window.JSZip) { toast("압축 라이브러리를 불러오지 못했습니다. 새로고침하세요."); return; }
+  const V = S.view, rel = S.files[S.idx].rel, s = gridSec(S.region[0]), e = gridSec(S.region[1]);
+  const zip = new JSZip(), name = clipName(rel, s, e);
+  zip.file(name, encodeWav(V.chans, V.sr, V.tag, V.bits, S.region[0], S.region[1]));
+  zip.file("clips.csv", toCsv(["clip", "file", "start_s", "end_s", "duration_ms", "sample_rate", "status", "memo", "saved"],
+    [[name, rel, s, e, Math.round((e - s) * 1000), V.sr, STATUS_NAME[S.status], S.memo, isDirty() ? "저장 전" : "저장됨"]]));
+  await saveFile(`beep_clip_${S.me.id}_${stamp()}.zip`, await zip.generateAsync({ type: "blob" }));
+}
+async function cutAll() {
+  $("clip-result").textContent = "";
+  if (!S.folder) { $("clip-result").textContent = "먼저 WAV 폴더를 선택하세요 (오디오를 읽어야 자를 수 있습니다)."; return; }
+  if (!window.JSZip) { $("clip-result").textContent = "압축 라이브러리를 불러오지 못했습니다. 새로고침하세요."; return; }
+  const reviewedOnly = $("exp-reviewed").checked;
+  const todo = S.files.map((f) => [f, myLabels.get(f.rel)]).filter(([, l]) => l && l.start_sample != null && (!reviewedOnly || labelStatus(l) === "reviewed"));
+  if (!todo.length) { $("clip-result").textContent = "비프 구간을 저장한 파일이 없습니다."; return; }
+  const zip = new JSZip(), rows = []; let n = 0;
+  for (const [f, l] of todo) {
+    $("clip-result").textContent = `자르는 중… ${++n} / ${todo.length}`;
+    try {
+      const d = decodeWav(await f.file.arrayBuffer()), name = clipName(f.rel, l.start_s, l.end_s);
+      zip.file(name, encodeWav(d.chans, d.sr, d.tag, d.bits, Math.min(l.start_sample, d.n), Math.min(l.end_sample, d.n)));
+      rows.push([name, f.rel, l.start_s, l.end_s, Math.round((l.end_s - l.start_s) * 1000), d.sr, STATUS_NAME[labelStatus(l)], l.memo || ""]);
+    } catch (e) { rows.push(["(실패)", f.rel, l.start_s, l.end_s, "", "", "", e.message]); }
+  }
+  zip.file("clips.csv", toCsv(["clip", "file", "start_s", "end_s", "duration_ms", "sample_rate", "status", "memo"], rows));
+  $("clip-result").textContent = `${todo.length}개 구간을 잘랐습니다. 저장 창을 확인하세요.`;
+  if (await saveFile(`beep_clips_${S.me.id}_${stamp()}.zip`, await zip.generateAsync({ type: "blob" }))) await log(S.me.id, "내보내기", { detail: `구간 오디오 ${todo.length}개 (zip)` });
+}
 
-function clipWindow(s, e, n, sr) { if (s == null) return [null, null]; const L = Math.min(maxLenOf(sr), n), c = Math.floor((s + e) / 2); const a = Math.max(0, Math.min(n - L, c - Math.floor(L / 2))); return [a, a + L]; }
+/* ============================== export ============================== */
+const LABEL_HEADERS = ["번호", "파일", "작업자 ID", "작업자 이름", "상태", "비프 여부", "비프 구간", "시작(초)", "끝(초)", "길이(ms)", "메모",
+  "최초 작업 일시", "최종 수정 일시", "샘플레이트(Hz)", "파일 길이(초)", "시작 샘플", "끝 샘플", "SHA-256"];
+const LABEL_KEYS = [null, "file", "user_id", "display_name", "status", null, "region", "start_s", "end_s", "duration_ms", "memo",
+  "created_at", "updated_at", "sample_rate", "file_duration_s", "start_sample", "end_sample", "sha256"];
+const AUDIT_HEADERS = ["번호", "일시", "작업자 ID", "작업자 이름", "파일", "동작", "변경 전", "변경 후", "비고"], SOURCE = "출처 파일";
+const ACTION_FILL = { "저장": "DDEBF7", "로그인": "F2F2F2", "로그아웃": "F2F2F2", "저장 후 로그아웃": "F2F2F2", "아이디 생성": "F2F2F2", "데이터 폴더 변경": "FFE699", "내보내기": "F2F2F2", "엑셀 합치기": "F2F2F2", "초기화": "FCE4D6" };
+const STATUS_FILL = { "검수 완료": "E2EFDA", "작업 중": "FFF2CC", "미작업": "F2F2F2", "일치": "E2EFDA", "불일치": "FCE4D6" };
+const RULE_ROWS = [
+  ["라벨 규칙", "샘플(파일)마다 비프 구간은 최대 1개이며 길이 제한은 없습니다. 구간 경계는 10 ms 단위(소수 둘째 자리 초)로 기록합니다. 구간은 원본 오디오를 바꾸지 않고 표시만 합니다. 검수 완료인데 구간이 없으면 '비프 없음'입니다."],
+  ["상태", "미작업 / 작업 중 / 검수 완료 — 작업자가 직접 지정하고 저장한 값입니다."],
+  ["작업 이력", "작업자가 저장 버튼을 누를 때마다 그 시점까지 바뀐 내용(구간·상태·메모)이 한 줄씩 기록됩니다."],
+  ["작업자 간 일치", "두 작업자 이상이 라벨링한 파일에서 시작·끝 경계 차이가 모두 20 ms 이하면 '일치'."],
+  ["SHA-256", "오디오 파일의 지문 값입니다. 파일 내용이 조금이라도 다르면 값이 달라지며, 합칠 때 사람마다 같은 파일로 작업했는지 확인하는 데 씁니다."],
+  ["로그인 방식", "아이디만으로 로그인합니다. 작업자 ID는 본인 확인을 거친 값이 아닙니다."]];
+const SHEET_HELP = ["시트 설명", "라벨 결과: 작업자별 최종 구간 / 작업 이력: 누가 언제 무엇을 저장했는지 / 작업자 요약: 작업자별 진행 현황 / 파일 현황: 파일별 작업자 간 일치 여부"];
+
+function decorate(l0, name) {
+  const st = labelStatus(l0), l = { ...l0, display_name: name, status: STATUS_NAME[st], reviewed: st === "reviewed", has_beep: l0.start_sample != null };
+  l.duration_ms = l.has_beep ? Math.round((l.end_s - l.start_s) * 1000) : null;
+  l.region = regionText(l.start_s, l.end_s);
+  l.start_s = l.has_beep ? +fl2(l.start_s) : null; l.end_s = l.has_beep ? +fl2(l.end_s) : null;
+  l.file_duration_s = l.sample_rate ? Math.round(l.num_samples / l.sample_rate * 1000) / 1000 : null;
+  return l;
+}
 async function collect(reviewedOnly) {
   const uid = S.me.id, folder = S.folder || S.me.folder_name;
   let labels = (await Store.byUser("labels", uid)).filter((l) => l.dataset === folder);
   if (S.folder) { const have = new Set(S.files.map((f) => f.rel)); labels = labels.filter((l) => have.has(l.file)); }
-  if (reviewedOnly) labels = labels.filter((l) => l.reviewed);
+  if (reviewedOnly) labels = labels.filter((l) => labelStatus(l) === "reviewed");
   labels.sort((a, b) => (a.file < b.file ? -1 : 1));
-  const out = [];
-  for (const l0 of labels) {
-    const l = { ...l0, display_name: S.me.display_name, status: l0.reviewed ? "검수 완료" : "작업 중", has_beep: l0.start_sample != null };
-    const sr = l.sample_rate, n = l.num_samples;
-    l.duration_ms = l.has_beep ? Math.round(10000 * (l.end_sample - l.start_sample) / sr) / 10 : null;
-    l.region = regionText(l.start_s, l.end_s);
-    const [cs, ce] = clipWindow(l.start_sample, l.end_sample, n, sr);
-    l.clip_start_s = cs == null ? null : r6(cs / sr); l.clip_end_s = ce == null ? null : r6(ce / sr);
-    l.clip_region = l.has_beep ? regionText(l.clip_start_s, l.clip_end_s) : "";
-    const au = l.sha256 ? await Store.get("auto", l.sha256 + "|" + CFG_DIGEST) : null;
-    l.auto = au; l.auto_region = au ? regionText(au.start_s, au.end_s) : "";
-    l.auto_diff_start_ms = au && au.start_s != null && l.has_beep ? Math.round(10000 * (l.start_s - au.start_s)) / 10 : null;
-    l.auto_diff_end_ms = au && au.start_s != null && l.has_beep ? Math.round(10000 * (l.end_s - au.end_s)) / 10 : null;
-    l.file_duration_s = sr ? Math.round(n / sr * 1000) / 1000 : null;
-    out.push(l);
-  }
+  const out = labels.map((l) => decorate(l, S.me.display_name));
   const audit = (await myAudit(uid)).filter((a) => a.dataset === folder || a.dataset == null).map((a) => ({ ...a, display_name: S.me.display_name }));
   const files = S.folder ? S.files.map((f) => [f.rel, f.info && !f.info.error ? Math.round(f.info.n / f.info.sr * 1000) / 1000 : null]) : out.map((l) => [l.file, l.file_duration_s]);
-  const autoBy = {}; for (const l of out) if (l.auto_region) autoBy[l.file] = l.auto_region;
-  return { folder, labels: out, audit, users: { [uid]: { display_name: S.me.display_name, created_at: S.me.created_at, last_login: S.me.last_login } }, files, autoBy };
+  return { folder, labels: out, audit, users: { [uid]: { display_name: S.me.display_name, created_at: S.me.created_at, last_login: S.me.last_login } }, files };
 }
 function agreement(ls) {
-  const b = ls.filter((l) => l.has_beep), mm = (k) => b.length >= 2 ? Math.round(10000 * (Math.max(...b.map((l) => l[k])) - Math.min(...b.map((l) => l[k])))) / 10 : null;
+  const b = ls.filter((l) => l.has_beep), mm = (k) => b.length >= 2 ? Math.round(1000 * (Math.max(...b.map((l) => l[k])) - Math.min(...b.map((l) => l[k])))) : null;
   const ds = mm("start_s"), de = mm("end_s");
   if (ls.length < 2) return ["—", ds, de];
   if (b.length && b.length < ls.length) return ["불일치", ds, de];
@@ -1076,7 +1030,7 @@ function agreement(ls) {
   return [Math.max(ds, de) <= AGREE_TOL_MS ? "일치" : "불일치", ds, de];
 }
 const WIDE = [[0x1100, 0x115f], [0x2e80, 0xa4cf], [0xac00, 0xd7a3], [0xf900, 0xfaff], [0xfe30, 0xfe4f], [0xff00, 0xff60], [0xffe0, 0xffe6]];
-const cw = (v) => [...String(v ?? "")].reduce((s, ch) => { const c = ch.codePointAt(0); return s + (WIDE.some(([a, b]) => c >= a && c <= b) ? 2 : 1); }, 0);
+const cw = (v) => Math.max(...String(v ?? "").split("\n").map((line) => [...line].reduce((s, ch) => { const c = ch.codePointAt(0); return s + (WIDE.some(([a, b]) => c >= a && c <= b) ? 2 : 1); }, 0)));
 function table(ws, headers, rows, { widths = {}, wrap = [], fill = null, fmt = {} } = {}) {
   const thin = { style: "thin", color: { argb: "FFBFBFBF" } }, border = { top: thin, left: thin, bottom: thin, right: thin };
   const hr = ws.addRow(headers); hr.height = 30;
@@ -1098,23 +1052,23 @@ async function writeWorkbook(d, title, info, withSource) {
   const wb = new ExcelJS.Workbook(), src = withSource ? [SOURCE] : [];
   let ws = wb.addWorksheet("라벨 결과");
   table(ws, [...LABEL_HEADERS, ...src], d.labels.map((l, n) => [...LABEL_HEADERS.map((h, j) => h === "번호" ? n + 1 : h === "비프 여부" ? (l.has_beep ? "있음" : "없음") : l[LABEL_KEYS[j]] ?? null), ...(withSource ? [l.source || ""] : [])]),
-    { widths: { "메모": 40, "SHA-256": 20 }, wrap: [15], fmt: { "시작(초)": "0.000", "끝(초)": "0.000" }, fill: (r) => STATUS_FILL[r[4]] });
+    { widths: { "메모": 40, "SHA-256": 18 }, wrap: [11], fmt: { "시작(초)": "0.00", "끝(초)": "0.00" }, fill: (r) => STATUS_FILL[r[4]] });
   ws = wb.addWorksheet("작업 이력");
   table(ws, [...AUDIT_HEADERS, ...src], d.audit.map((a, n) => [n + 1, a.ts, a.user_id || "", a.display_name || a.user_id || "", a.file || "", a.action, a.before || "", a.after || "", a.detail || "", ...(withSource ? [a.source || ""] : [])]),
-    { widths: { "변경 전": 30, "변경 후": 30, "비고": 30 }, wrap: [7, 8, 9], fill: (r) => ACTION_FILL[r[5]] });
+    { widths: { "변경 전": 34, "변경 후": 34, "비고": 22 }, wrap: [7, 8, 9], fill: (r) => ACTION_FILL[r[5]] });
   ws = wb.addWorksheet("작업자 요약");
   const nFiles = d.files.length, sum = [];
   for (const [uid, u] of Object.entries(d.users)) {
     const ls = d.labels.filter((l) => l.user_id === uid), durs = ls.map((l) => l.duration_ms).filter((v) => v != null), done = ls.filter((l) => l.reviewed).length;
-    sum.push([uid, u.display_name || uid, u.created_at || "", u.last_login || "", ls.length, done, ls.length - done, ls.filter((l) => l.has_beep).length, ls.filter((l) => !l.has_beep).length,
-      durs.length ? Math.round(10 * durs.reduce((a, b) => a + b) / durs.length) / 10 : null, d.audit.filter((a) => a.user_id === uid).length, nFiles ? `${done}/${nFiles} (${(100 * done / nFiles).toFixed(1)}%)` : "-"]);
+    sum.push([uid, u.display_name || uid, u.created_at || "", u.last_login || "", ls.length, done, ls.filter((l) => l.status === "작업 중").length, ls.filter((l) => l.has_beep).length, ls.filter((l) => l.reviewed && !l.has_beep).length,
+      durs.length ? Math.round(durs.reduce((a, b) => a + b) / durs.length) : null, d.audit.filter((a) => a.user_id === uid && a.action === "저장").length, nFiles ? `${done}/${nFiles} (${(100 * done / nFiles).toFixed(1)}%)` : "-"]);
   }
-  table(ws, ["작업자 ID", "작업자 이름", "생성 일시", "마지막 로그인", "작업한 파일 수", "검수 완료", "작업 중", "비프 있음", "비프 없음", "평균 구간 길이(ms)", "작업 이력 수", "진행률(검수/전체 파일)"], sum);
+  table(ws, ["작업자 ID", "작업자 이름", "생성 일시", "마지막 로그인", "작업한 파일 수", "검수 완료", "작업 중", "비프 있음", "비프 없음(검수)", "평균 구간 길이(ms)", "저장 횟수", "진행률(검수/전체 파일)"], sum);
   ws = wb.addWorksheet("파일 현황");
   const byFile = new Map(); for (const l of d.labels) { if (!byFile.has(l.file)) byFile.set(l.file, []); byFile.get(l.file).push(l); }
-  table(ws, ["파일", "파일 길이(초)", "작업자 수", "검수 완료 작업자", "작업자별 구간", "작업자 간 일치(±20ms)", "시작 최대 차이(ms)", "끝 최대 차이(ms)", "자동탐지 구간", "메모 모음"],
-    d.files.map(([f, dur]) => { const ls = byFile.get(f) || [], [v, ds, de] = agreement(ls); return [f, dur, ls.length, ls.filter((l) => l.reviewed).map((l) => l.user_id).join(", "), ls.map((l) => `${l.user_id}: ${l.region}`).join("\n"), v, ds, de, d.autoBy[f] || "", ls.filter((l) => l.memo).map((l) => `${l.user_id}: ${l.memo}`).join("\n")]; }),
-    { widths: { "작업자별 구간": 38, "메모 모음": 40 }, wrap: [5, 10], fill: (r) => STATUS_FILL[r[5]] });
+  table(ws, ["파일", "파일 길이(초)", "작업자 수", "검수 완료 작업자", "작업자별 구간", "작업자 간 일치(±20ms)", "시작 최대 차이(ms)", "끝 최대 차이(ms)", "메모 모음"],
+    d.files.map(([f, dur]) => { const ls = byFile.get(f) || [], [v, ds, de] = agreement(ls); return [f, dur, ls.length, ls.filter((l) => l.reviewed).map((l) => l.user_id).join(", "), ls.map((l) => `${l.user_id}: ${l.region} (${l.status})`).join("\n"), v, ds, de, ls.filter((l) => l.memo).map((l) => `${l.user_id}: ${l.memo}`).join("\n")]; }),
+    { widths: { "작업자별 구간": 42, "메모 모음": 40 }, wrap: [5, 9], fill: (r) => STATUS_FILL[r[5]] });
   ws = wb.addWorksheet("정보");
   ws.getCell("A1").value = title; ws.getCell("A1").font = { bold: true, size: 14 };
   info.forEach(([k, v], i) => { ws.getCell(i + 3, 1).value = k; ws.getCell(i + 3, 1).font = { bold: true }; const c = ws.getCell(i + 3, 2); c.value = v; c.alignment = { wrapText: true, vertical: "top" }; });
@@ -1127,21 +1081,21 @@ const toCsv = (head, rows) => "﻿" + [head, ...rows].map((r) => r.map(csvCell).
 
 async function doExport(kind) {
   $("exp-error").textContent = "";
-  await flushSave();
+  if (isDirty()) toast("저장하지 않은 변경은 내보내기에 들어가지 않습니다.");
   const d = await collect($("exp-reviewed").checked), base = `${S.me.id}_${stamp()}`;
-  if (!d.labels.length && kind !== "audit") { $("exp-error").textContent = "내보낼 라벨이 없습니다. 먼저 구간을 지정하세요."; return; }
+  if (!d.labels.length && kind !== "audit") { $("exp-error").textContent = "내보낼 라벨이 없습니다. 먼저 구간을 지정하고 저장하세요."; return; }
   let ok = false;
   try {
     if (kind === "xlsx") {
-      const info = [["생성 일시", now()], ["내보낸 사람", S.me.id], ["데이터 폴더", d.folder || ""], ["툴 버전", VERSION], ...RULE_ROWS, ["탐지 설정 해시", CFG_DIGEST],
+      const info = [["생성 일시", now()], ["내보낸 사람", S.me.id], ["데이터 폴더", d.folder || ""], ["툴 버전", VERSION], ...RULE_ROWS,
         ["전체 파일 수", d.files.length], ["라벨 수(작업자×파일)", d.labels.length], ["작업자 수", 1], ["작업 이력 수", d.audit.length], SHEET_HELP];
       ok = await saveFile(`beep_labels_${base}.xlsx`, await writeWorkbook(d, "Beep Labeler 내보내기 정보", info, false));
     } else if (kind === "labels") {
-      ok = await saveFile(`beep_labels_${base}.csv`, toCsv(["file", "user_id", "user_name", "status", "has_beep", "start_s", "end_s", "duration_ms", "start_sample", "end_sample", "clip100_start_s", "clip100_end_s", "memo", "auto_start_s", "auto_end_s", "n_edits", "created_at", "updated_at", "sample_rate", "file_duration_s", "sha256"],
-        d.labels.map((l) => [l.file, l.user_id, l.display_name, l.status, l.has_beep ? 1 : 0, l.start_s, l.end_s, l.duration_ms, l.start_sample, l.end_sample, l.clip_start_s, l.clip_end_s, l.memo, l.auto?.start_s, l.auto?.end_s, l.n_edits, l.created_at, l.updated_at, l.sample_rate, l.file_duration_s, l.sha256])));
+      ok = await saveFile(`beep_labels_${base}.csv`, toCsv(["file", "user_id", "user_name", "status", "has_beep", "start_s", "end_s", "duration_ms", "start_sample", "end_sample", "memo", "created_at", "updated_at", "sample_rate", "file_duration_s", "sha256"],
+        d.labels.map((l) => [l.file, l.user_id, l.display_name, l.status, l.has_beep ? 1 : 0, l.start_s, l.end_s, l.duration_ms, l.start_sample, l.end_sample, l.memo, l.created_at, l.updated_at, l.sample_rate, l.file_duration_s, l.sha256])));
     } else if (kind === "frames") {
       const rows = [];
-      for (const l of d.labels) { const fb = frameBounds(l.num_samples, l.sample_rate); fb.starts.forEach((s, i) => { const e = fb.ends[i], ov = l.has_beep ? Math.max(0, Math.min(e, l.end_sample) - Math.max(s, l.start_sample)) : 0; rows.push([l.file, l.user_id, l.status, i, r6(s / l.sample_rate), r6(e / l.sample_rate), Math.round(10000 * ov / l.sample_rate) / 10, ov > 0 ? 1 : 0, l.memo]); }); }
+      for (const l of d.labels) { const fb = frameBounds(l.num_samples, l.sample_rate); fb.starts.forEach((s, i) => { const e = fb.ends[i], ov = l.has_beep ? Math.max(0, Math.min(e, l.end_sample) - Math.max(s, l.start_sample)) : 0; rows.push([l.file, l.user_id, l.status, i, r6(s / l.sample_rate), r6(e / l.sample_rate), Math.round(1000 * ov / l.sample_rate), ov > 0 ? 1 : 0, l.memo]); }); }
       ok = await saveFile(`beep_frames_${base}.csv`, toCsv(["file", "user_id", "status", "frame_index", "start_s", "end_s", "overlap_ms", "label", "memo"], rows));
     } else {
       ok = await saveFile(`beep_audit_${base}.csv`, toCsv(["id", "timestamp", "user_id", "file", "action", "before", "after", "detail"], d.audit.map((a) => [a.id, a.ts, a.user_id, a.file, a.action, a.before, a.after, a.detail])));
@@ -1149,9 +1103,10 @@ async function doExport(kind) {
   } catch (e) { $("exp-error").textContent = "내보내기 실패: " + e.message; return; }
   if (ok) await log(S.me.id, "내보내기", { detail: `${kind} (검수 완료만: ${$("exp-reviewed").checked ? "예" : "아니오"})` });
 }
-$("btn-export").onclick = () => { $("exp-error").textContent = ""; $("dlg-export").showModal(); };
+$("btn-export").onclick = () => { $("exp-error").textContent = ""; $("clip-result").textContent = ""; $("dlg-export").showModal(); };
 $("exp-xlsx").onclick = () => doExport("xlsx"); $("exp-labels").onclick = () => doExport("labels");
 $("exp-frames").onclick = () => doExport("frames"); $("exp-audit").onclick = () => doExport("audit");
+$("exp-clips").onclick = cutAll;
 
 /* ============================== merge ============================== */
 function cellText(v) {
@@ -1166,7 +1121,7 @@ function sheetRows(ws) {
   ws.eachRow((row, i) => { if (i === 1) return; const o = {}; let any = false; head.forEach((h, j) => { if (!h) return; const v = row.getCell(j).value; if (v != null && v !== "") any = true; o[h] = v; }); if (any) out.push(o); });
   return [head.filter(Boolean), out];
 }
-const NUMERIC = new Set(["start_s", "end_s", "duration_ms", "auto_diff_start_ms", "auto_diff_end_ms", "n_edits", "sample_rate", "file_duration_s", "start_sample", "end_sample"]);
+const NUMERIC = new Set(["start_s", "end_s", "duration_ms", "sample_rate", "file_duration_s", "start_sample", "end_sample"]);
 async function readExport(file) {
   const wb = new ExcelJS.Workbook();
   try { await wb.xlsx.load(await file.arrayBuffer()); } catch (e) { throw new Error(`${file.name}: 엑셀 파일을 열 수 없습니다`); }
@@ -1181,6 +1136,8 @@ async function readExport(file) {
     if (!l.file || !l.user_id) continue;
     l.display_name = l.display_name || l.user_id; l.reviewed = l.status === "검수 완료"; l.has_beep = cellText(r["비프 여부"]) === "있음";
     if (l.has_beep && (l.start_s == null || l.end_s == null)) throw new Error(`${file.name}: ${l.file} / ${l.user_id} 의 시작·끝 초가 비어 있습니다`);
+    if (l.has_beep) { l.region = regionText(l.start_s, l.end_s); l.duration_ms = l.duration_ms ?? Math.round((l.end_s - l.start_s) * 1000); }
+    else l.region = "비프 없음";
     l.source = cellText(r[SOURCE]) || file.name; labels.push(l);
   }
   const [, arows] = sheetRows(Au);
@@ -1196,7 +1153,7 @@ async function mergeExports(exps) {
       const k = l.file + "\u0001" + l.user_id, o = best.get(k);
       if (!o) { best.set(k, l); continue; }
       rep.duplicates++;
-      const same = o.has_beep === l.has_beep && o.start_s === l.start_s && o.end_s === l.end_s && o.memo === l.memo && o.reviewed === l.reviewed, newer = l.updated_at > o.updated_at;
+      const same = o.has_beep === l.has_beep && o.start_s === l.start_s && o.end_s === l.end_s && o.memo === l.memo && o.status === l.status, newer = l.updated_at > o.updated_at;
       if (!same) { const [kp, dp] = newer ? [l, o] : [o, l]; rep.conflicts.push(`${l.file} / ${l.user_id}: '${kp.source}'(${kp.updated_at}, ${kp.region}) 사용, '${dp.source}'(${dp.updated_at}, ${dp.region}) 제외`); }
       if (newer) best.set(k, l);
     }
@@ -1211,12 +1168,12 @@ async function mergeExports(exps) {
   for (const l of labels) users[l.user_id] ||= { display_name: l.display_name, created_at: "", last_login: "" };
   for (const a of audit) { if (!a.user_id) continue; const u = (users[a.user_id] ||= { display_name: a.display_name || a.user_id, created_at: "", last_login: "" }); if (a.action === "아이디 생성" && (!u.created_at || a.ts < u.created_at)) u.created_at = a.ts; if (a.action === "로그인" && a.ts > u.last_login) u.last_login = a.ts; }
   const sortedUsers = Object.fromEntries(Object.entries(users).sort());
-  const files = new Map(), autoBy = {}; for (const l of labels) { if (!files.has(l.file)) files.set(l.file, l.file_duration_s); if (l.auto_region && !autoBy[l.file]) autoBy[l.file] = l.auto_region; }
+  const files = new Map(); for (const l of labels) if (!files.has(l.file)) files.set(l.file, l.file_duration_s);
   const fileList = [...files].sort((a, b) => (a[0] < b[0] ? -1 : 1));
   const info = [["합친 일시", now()], ["툴 버전", VERSION], ["합친 파일", rep.sources.join("\n")], ["중복 라벨", `${rep.duplicates}개 (같은 파일·같은 작업자 → 최종 수정 일시가 가장 늦은 것 사용)`],
-    ["내용이 다른 중복", rep.conflicts.join("\n") || "없음"], ["오디오 불일치 경고", rep.sha.length ? "같은 파일 이름인데 PC마다 오디오 내용(SHA-256)이 다름: " + rep.sha.join(", ") : "없음"],
+    ["내용이 다른 중복", rep.conflicts.join("\n") || "없음"], ["오디오 불일치 경고", rep.sha.length ? "같은 파일 이름인데 사람마다 오디오 내용(SHA-256)이 다름: " + rep.sha.join(", ") : "없음"],
     ...RULE_ROWS, ["파일 수", fileList.length], ["라벨 수(작업자×파일)", labels.length], ["작업자 수", Object.keys(sortedUsers).length], ["작업 이력 수", audit.length], SHEET_HELP];
-  const blob = await writeWorkbook({ labels, audit, users: sortedUsers, files: fileList, autoBy }, "Beep Labeler 합친 결과", info, true);
+  const blob = await writeWorkbook({ labels, audit, users: sortedUsers, files: fileList }, "Beep Labeler 합친 결과", info, true);
   return { blob, rep, n: { labels: labels.length, audit: audit.length, users: Object.keys(sortedUsers), files: fileList.length } };
 }
 $("merge-files").onchange = () => { const n = $("merge-files").files.length; $("merge-run").disabled = !n; $("merge-result").textContent = n ? `${n}개 선택됨: ${[...$("merge-files").files].map((f) => f.name).join(", ")}` : ""; };
@@ -1237,26 +1194,46 @@ $("merge-run").onclick = async () => {
   $("merge-run").disabled = false;
 };
 
-/* ============================== backup ============================== */
-$("btn-backup").onclick = () => { $("backup-result").textContent = ""; $("dlg-backup").showModal(); };
+/* ============================== backup & reset ============================== */
+$("btn-backup").onclick = () => { $("backup-result").textContent = ""; $("rs-file").disabled = !S.view; $("rs-folder").disabled = !S.folder; $("dlg-backup").showModal(); };
 $("bk-save").onclick = async () => {
-  await flushSave();
   const data = { app: "beeplabel-web", version: VERSION, exported_at: now(), user: S.me, labels: await Store.byUser("labels", S.me.id), audit: await myAudit(S.me.id) };
-  if (await saveFile(`beeplabel_backup_${S.me.id}_${stamp()}.json`, JSON.stringify(data))) $("backup-result").textContent = `라벨 ${data.labels.length}개, 이력 ${data.audit.length}개를 백업했습니다.`;
+  if (await saveFile(`beeplabel_backup_${S.me.id}_${stamp()}.json`, JSON.stringify(data))) $("backup-result").textContent = `라벨 ${data.labels.length}개, 기록 ${data.audit.length}개를 백업했습니다.`;
 };
 $("bk-file").onchange = async () => {
   const f = $("bk-file").files[0]; $("bk-file").value = ""; if (!f) return;
   try {
     const d = JSON.parse(await f.text());
     if (d.app !== "beeplabel-web" || !d.user) throw new Error("Beep Labeler 백업 파일이 아닙니다");
-    if (d.user.id !== S.me.id && !(await ask("다른 아이디의 백업", `이 백업은 '${d.user.id}' 아이디의 기록입니다. 지금 아이디(${S.me.id})로 가져올까요?`, "가져오기"))) return;
+    if (d.user.id !== S.me.id && (await ask("다른 아이디의 백업", `이 백업은 '${d.user.id}' 아이디의 기록입니다. 지금 아이디(${S.me.id})로 가져올까요?`, "가져오기")) !== "yes") return;
     let nl = 0, na = 0;
     for (const l of d.labels || []) { const key = lkey(S.me.id, l.dataset, l.file), o = await Store.get("labels", key); if (!o || (l.updated_at || "") > (o.updated_at || "")) { await Store.put("labels", { ...l, key, user_id: S.me.id }); nl++; } }
     const have = new Set((await myAudit(S.me.id)).map((a) => [a.ts, a.action, a.file, a.before, a.after].join("\u0001")));
     for (const a of d.audit || []) { const k = [a.ts, a.action, a.file, a.before, a.after].join("\u0001"); if (!have.has(k)) { const { id, ...rest } = a; await Store.put("audit", { ...rest, user_id: S.me.id }); na++; } }
-    $("backup-result").textContent = `복원 완료: 라벨 ${nl}개, 이력 ${na}개를 가져왔습니다.`;
-    if (S.folder) { myLabels.clear(); for (const l of await Store.byUser("labels", S.me.id)) if (l.dataset === S.folder) myLabels.set(l.file, l); renderFiles(); if (S.idx >= 0) openFile(S.idx); }
-  } catch (e) { $("backup-result").textContent = "복원 실패: " + e.message; }
+    $("backup-result").textContent = `불러오기 완료: 라벨 ${nl}개, 기록 ${na}개를 가져왔습니다.`;
+    if (S.folder) { await reloadMyLabels(); renderFiles(); if (S.idx >= 0) openFile(S.idx, true); }
+  } catch (e) { $("backup-result").textContent = "불러오기 실패: " + e.message; }
+};
+/** Reset to the state right after the folder was loaded: labels and saved history go away. */
+async function resetFiles(rels) {
+  const set = new Set(rels);
+  for (const rel of rels) await Store.del("labels", lkey(S.me.id, S.folder, rel));
+  for (const a of await myAudit(S.me.id)) if (a.dataset === S.folder && a.file && set.has(a.file)) await Store.del("audit", a.id);
+  await log(S.me.id, "초기화", { dataset: S.folder, detail: rels.length === 1 ? rels[0] : `폴더 전체 ${rels.length}개 파일` });
+  await reloadMyLabels(); renderFiles();
+  if (S.view && set.has(S.files[S.idx].rel)) { applySaved(null); S.undo = []; S.redo = []; refreshPanels(); draw(); setSave("처음 상태로 초기화했습니다"); loadHistory(); }
+}
+$("rs-file").onclick = async () => {
+  if (!S.view) return;
+  const rel = S.files[S.idx].rel;
+  if ((await ask("이 파일 초기화", `${rel}\n비프 구간 · 메모 · 상태 · 저장 기록을 모두 지우고 처음 상태로 되돌립니다.\n되돌릴 수 없습니다.`, "초기화")) !== "yes") return;
+  await resetFiles([rel]); $("backup-result").textContent = `${rel} 을(를) 처음 상태로 되돌렸습니다.`;
+};
+$("rs-folder").onclick = async () => {
+  if (!S.folder) return;
+  const rels = S.files.map((f) => f.rel);
+  if ((await ask("폴더 전체 초기화", `${S.folder} 폴더의 파일 ${rels.length}개에 대해\n비프 구간 · 메모 · 상태 · 저장 기록을 모두 지웁니다.\n되돌릴 수 없으니 필요하면 먼저 백업하세요.`, "전체 초기화")) !== "yes") return;
+  await resetFiles(rels); $("backup-result").textContent = `${S.folder} 폴더 전체를 처음 상태로 되돌렸습니다.`;
 };
 
 /* ============================== boot ============================== */
