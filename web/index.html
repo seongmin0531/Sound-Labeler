@@ -1,0 +1,1271 @@
+<meta charset="utf-8">
+<title>Beep Labeler</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one-screen tool — file list | waveform+spectrogram+100ms strip | memo & my history.
+   Amber marks the beep region (a dashboard warning lamp); cyan marks the detector's suggestion. */
+:root {
+  --bg: #f1f4f7; --surface: #ffffff; --surface-2: #e8edf2; --line: #d2d9e1;
+  --fg: #16202b; --muted: #5b6978; --accent: #b86e06; --accent-fg: #ffffff; --accent-2: #0a78aa;
+  --ok: #1b8553; --warn: #c0392b; --draft: #7143c6; --primary: #1f6f4a;
+  --c-bg: #ffffff; --c-track: #f2f5f8; --c-wave: #2d69b0; --c-grid: rgba(20,32,43,.09); --c-text: rgba(20,32,43,.62);
+  --c-frame: #e1e6ec; --c-frame-on: #e9a23b; --c-region: rgba(233,150,30,.20); --c-region-line: #c77a08;
+  --c-auto: rgba(10,120,170,.9); --c-cursor: rgba(20,32,43,.65); --c-play: #0f1720;
+  --font: "IBM Plex Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  --r: 7px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10151b; --surface: #161d25; --surface-2: #1e2731; --line: #2b3642;
+    --fg: #e2e8ee; --muted: #8997a6; --accent: #f0a531; --accent-fg: #1a1206; --accent-2: #4db6e6;
+    --ok: #3cc488; --warn: #f06a5a; --draft: #b08ff0; --primary: #2d8a5c;
+    --c-bg: #0c1116; --c-track: #131a21; --c-wave: #6fa7de; --c-grid: rgba(255,255,255,.08); --c-text: rgba(255,255,255,.62);
+    --c-frame: #243039; --c-frame-on: #c9851f; --c-region: rgba(240,165,49,.20); --c-region-line: #ffc15a;
+    --c-auto: rgba(77,182,230,.9); --c-cursor: rgba(255,255,255,.7); --c-play: #ffffff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10151b; --surface: #161d25; --surface-2: #1e2731; --line: #2b3642;
+  --fg: #e2e8ee; --muted: #8997a6; --accent: #f0a531; --accent-fg: #1a1206; --accent-2: #4db6e6;
+  --ok: #3cc488; --warn: #f06a5a; --draft: #b08ff0; --primary: #2d8a5c;
+  --c-bg: #0c1116; --c-track: #131a21; --c-wave: #6fa7de; --c-grid: rgba(255,255,255,.08); --c-text: rgba(255,255,255,.62);
+  --c-frame: #243039; --c-frame-on: #c9851f; --c-region: rgba(240,165,49,.20); --c-region-line: #ffc15a;
+  --c-auto: rgba(77,182,230,.9); --c-cursor: rgba(255,255,255,.7); --c-play: #ffffff;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 13px/1.5 var(--font); margin: 0; }
+* { box-sizing: border-box; }
+button, select, input, textarea { font: inherit; color: var(--fg); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r); }
+button { padding: 5px 11px; cursor: pointer; white-space: nowrap; }
+button:hover:not(:disabled) { border-color: var(--muted); }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 1px; }
+button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+button.danger { background: var(--warn); border-color: var(--warn); color: #fff; }
+button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+button:disabled { opacity: .45; cursor: default; }
+input, select, textarea { padding: 5px 8px; }
+code, .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.spacer { flex: 1; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.row.end { justify-content: flex-end; }
+.error { color: var(--warn); font-size: 12px; min-height: 1.2em; }
+.pill { font-size: 12px; padding: 1px 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); }
+h3 { font-size: 12px; font-weight: 600; letter-spacing: .04em; color: var(--muted); margin: 16px 0 6px; }
+
+/* login */
+#login { min-height: 100%; display: grid; place-items: center; padding-inline: 16px; padding-block: 24px; }
+.card { width: 100%; max-width: 380px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 24px; display: grid; gap: 14px; }
+.brand { font-weight: 700; font-size: 16px; letter-spacing: -.01em; display: flex; gap: 8px; align-items: center; }
+.lamp { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.card label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.card input { padding: 9px 10px; font-size: 15px; }
+.wide { width: 100%; padding: 9px; font-size: 14px; }
+.note { font-size: 12px; color: var(--muted); background: var(--surface-2); border-radius: var(--r); padding: 8px 10px; }
+
+/* app */
+#app { height: 100%; display: flex; flex-direction: column; }
+header { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
+#folder-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 360px; }
+#who { font-weight: 600; }
+#layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr) 290px; }
+#side { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-right: 1px solid var(--line); background: var(--surface); min-height: 0; }
+#files { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; min-height: 80px; }
+#files li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 0 7px; align-items: center; padding: 5px 6px; border-radius: 6px; cursor: pointer; }
+#files li:hover { background: var(--surface-2); }
+#files li.active { background: color-mix(in srgb, var(--accent-2) 20%, transparent); }
+#files .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#files .dur, #files .reg { color: var(--muted); font-size: 11px; }
+#files .reg { grid-column: 2 / 4; font-family: var(--mono); }
+.dot { width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--muted); }
+.dot.reviewed { background: var(--ok); border-color: var(--ok); }
+.dot.draft { background: var(--draft); border-color: var(--draft); }
+.drop { border: 1.5px dashed var(--line); border-radius: var(--r); padding: 14px 10px; text-align: center; color: var(--muted); font-size: 12px; }
+.drop.over { border-color: var(--accent-2); color: var(--fg); }
+main { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
+#toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+#toolbar .grp { display: flex; gap: 4px; flex-wrap: wrap; }
+#title-row { display: flex; gap: 12px; align-items: baseline; padding: 8px 14px 4px; flex-wrap: wrap; }
+#file-title { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+#wrap { height: 214px; padding-inline: 12px; flex: none; transition: height .15s; }
+#wrap.big { height: 520px; }
+@media (prefers-reduced-motion: reduce) { #wrap { transition: none; } }
+canvas { width: 100%; height: 100%; display: block; border: 1px solid var(--line); border-radius: var(--r); cursor: crosshair; touch-action: none; }
+#region-bar { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; padding: 10px 14px 4px; }
+#region-text { font: 600 17px var(--mono); color: var(--accent); }
+#status { padding: 2px 14px 12px; color: var(--muted); font: 12px var(--mono); }
+#empty { margin: 24px 14px; }
+#insp { border-left: 1px solid var(--line); background: var(--surface); padding: 2px 14px 16px; overflow: auto; }
+#memo { width: 100%; resize: vertical; }
+#history { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 12px; }
+#history li { display: flex; gap: 6px; align-items: flex-start; }
+#history .t { display: block; color: var(--muted); font: 11px var(--mono); }
+#hist-tools { background: var(--surface-2); border-radius: var(--r); padding: 8px; margin-bottom: 8px; display: grid; gap: 6px; }
+.hist-btn { float: right; font-size: 11px; padding: 1px 8px; }
+
+dialog { background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 12px; width: min(560px, calc(100vw - 32px)); padding: 20px; }
+dialog::backdrop { background: rgba(8, 12, 16, .5); }
+dialog h2 { font-size: 16px; margin: 0 0 10px; }
+dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
+.grid2 { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 8px 12px; align-items: center; }
+.keys { width: 100%; border-collapse: collapse; font-size: 12px; }
+.keys td { padding: 4px 10px 4px 0; vertical-align: top; }
+.keys td:first-child { font-family: var(--mono); color: var(--accent-2); white-space: nowrap; }
+#merge-result, #backup-result { white-space: pre-wrap; font: 12px var(--mono); max-height: 200px; overflow: auto; margin: 8px 0 0; }
+#toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: var(--r); font-size: 13px; max-width: calc(100vw - 32px); }
+
+@media (max-width: 1000px) {
+  #app { height: auto; }
+  #layout { grid-template-columns: minmax(0, 1fr); }
+  #side { max-height: 260px; border-right: 0; border-bottom: 1px solid var(--line); }
+  #insp { border-left: 0; border-top: 1px solid var(--line); }
+  #wrap { height: 240px; }
+}
+</style>
+
+<!-- ================= login ================= -->
+<div id="login" hidden>
+  <form class="card" id="login-form" autocomplete="on">
+    <div class="row"><div class="brand"><span class="lamp"></span>Beep Labeler</div><span class="spacer"></span>
+      <button type="button" class="theme-btn" title="테마 전환">◐ 테마</button></div>
+    <label for="lg-id">아이디<input id="lg-id" name="username" autocomplete="username" placeholder="예: hong" required></label>
+    <div id="lg-new" hidden>
+      <p class="small">처음 보는 아이디입니다. <b id="lg-new-id"></b> 로 새로 시작할까요? <span class="muted">(오타라면 다시 입력하세요)</span></p>
+      <label for="lg-name">이름 (표시용, 선택)<input id="lg-name" autocomplete="name"></label>
+    </div>
+    <div class="error" id="lg-error"></div>
+    <button class="primary wide" id="lg-submit" type="submit">로그인</button>
+    <div class="note">기록은 <b>이 브라우저에만</b> 저장되고 어디에도 올라가지 않습니다. WAV 파일도 이 PC에서만 읽습니다.
+      같은 브라우저에서 같은 아이디로 로그인하면 이전 작업이 이어집니다.</div>
+  </form>
+</div>
+
+<!-- ================= app ================= -->
+<div id="app" hidden>
+  <header>
+    <div class="brand"><span class="lamp"></span>Beep Labeler</div>
+    <span class="pill num" id="progress"></span>
+    <span class="muted small" id="folder-label"></span>
+    <span class="spacer"></span>
+    <span id="who"></span>
+    <button class="theme-btn" title="테마 전환 (T)">◐ 테마</button>
+    <button id="btn-export">엑셀/CSV 내보내기</button>
+    <button id="btn-backup">백업·복원</button>
+    <button id="btn-help" title="단축키 (?)">?</button>
+    <button id="btn-logout" class="primary">저장 후 로그아웃</button>
+  </header>
+  <div id="layout">
+    <aside id="side">
+      <button id="btn-folder" class="primary">📁 WAV 폴더 선택</button>
+      <input type="file" id="folder-input" webkitdirectory directory multiple hidden>
+      <div class="drop" id="drop">여기에 WAV 폴더를 끌어다 놓아도 됩니다<br><span id="last-folder"></span></div>
+      <input id="filter" placeholder="파일 검색…" aria-label="파일 검색">
+      <select id="status-filter" aria-label="상태 필터">
+        <option value="">전체 파일</option><option value="none">미작업</option>
+        <option value="draft">작업 중</option><option value="reviewed">검수 완료</option>
+      </select>
+      <ul id="files"></ul>
+    </aside>
+    <main>
+      <div id="toolbar">
+        <div class="grp"><button id="btn-play-all" title="Space">▶ 전체 듣기</button><button id="btn-play-seg" title="Enter">▶ 구간만 듣기</button><button id="btn-stop" title="Esc">■ 정지</button></div>
+        <div class="grp"><button id="btn-zin" title="=">＋</button><button id="btn-zout" title="-">－</button><button id="btn-fit" title="F">전체 보기</button><button id="btn-big" title="B">스펙트로그램 크게 보기</button></div>
+        <div class="grp"><button id="btn-auto" title="A">자동 제안 적용</button><button id="btn-nobeep" title="Delete">비프 없음</button></div>
+        <div class="grp"><button id="btn-save" title="Ctrl+S">저장</button><button id="btn-review" class="primary" title="R">검수 완료 → 다음</button></div>
+        <label class="small muted row" for="gain">파형 배율 <select id="gain"><option>1</option><option>2</option><option>4</option><option>8</option><option>16</option></select></label>
+      </div>
+      <div id="title-row"><span id="file-title">—</span><span id="file-state"></span><span class="spacer"></span><span id="save-state" class="muted small"></span></div>
+      <div id="empty" class="note" hidden></div>
+      <div id="wrap"><canvas id="cv"></canvas></div>
+      <div id="region-bar">
+        <div><span class="muted">비프 구간</span> <span id="region-text">—</span></div>
+        <div id="region-detail" class="muted small num"></div>
+        <span class="spacer"></span>
+        <div class="muted small"><b>드래그</b>: 0~100 ms 구간 · <b>클릭</b>: 클릭 지점 ±50 ms · 파일당 1구간</div>
+      </div>
+      <div id="status"></div>
+    </main>
+    <aside id="insp">
+      <h3>메모 (데이터 특징)</h3>
+      <textarea id="memo" rows="4" placeholder="예: 비프 2회 반복, 배경에 음악, 창문 열림…" aria-label="메모"></textarea>
+      <div class="muted small">자동 저장되며 엑셀·CSV의 memo 열에 들어갑니다.</div>
+      <h3>자동 제안</h3>
+      <div id="auto-info" class="muted num">—</div>
+      <h3>이 파일에서 내가 한 작업 <button id="btn-hist-edit" class="hist-btn" type="button">이력 정리</button></h3>
+      <div id="hist-tools" hidden>
+        <span class="muted small">지울 이력을 체크하세요 (라벨은 그대로 두고 이력만 지웁니다)</span>
+        <div class="row end"><button id="btn-hist-cancel" type="button">취소</button><button id="btn-hist-del" class="danger" type="button" disabled>선택 삭제</button></div>
+      </div>
+      <ul id="history"></ul>
+    </aside>
+  </div>
+</div>
+
+<!-- ================= dialogs ================= -->
+<dialog id="dlg-confirm"><h2 id="cf-title">확인</h2><p id="cf-text" style="white-space:pre-wrap"></p>
+  <div class="row end"><button id="cf-no" type="button">취소</button><button id="cf-yes" class="danger" type="button">확인</button></div></dialog>
+
+<dialog id="dlg-export">
+  <h2>내보내기</h2>
+  <p class="muted small">로그인한 아이디의 라벨, 작업 이력(언제 · 무엇을 · 어떻게), 메모가 들어갑니다. 팀원과 비교하려면 각자 받은 엑셀을 아래에서 합치세요.</p>
+  <label class="row small" for="exp-reviewed"><input type="checkbox" id="exp-reviewed"> 검수 완료된 라벨만</label>
+  <div class="grid2" style="margin-top:10px">
+    <button id="exp-xlsx" class="primary" type="button">📊 엑셀 (.xlsx)</button><span class="muted small">라벨 결과 · 작업 이력 · 작업자 요약 · 파일 현황 · 정보</span>
+    <button id="exp-labels" type="button">labels.csv</button><span class="muted small">파일별 비프 구간(초) + 메모</span>
+    <button id="exp-frames" type="button">frames.csv</button><span class="muted small">100 ms 칸별 overlap_ms, label</span>
+    <button id="exp-audit" type="button">audit.csv</button><span class="muted small">작업 이력</span>
+  </div>
+  <hr>
+  <h2>여러 사람의 엑셀 합치기</h2>
+  <p class="muted small">팀원들이 각자 내보낸 엑셀(.xlsx)을 모두 선택하면 한 엑셀로 합쳐집니다. 파일 현황 시트에 작업자 간 일치(±20 ms)가 나옵니다. 같은 파일·같은 아이디는 가장 최근 수정본을 씁니다. 파일은 이 브라우저 안에서만 처리됩니다.</p>
+  <input type="file" id="merge-files" accept=".xlsx" multiple aria-label="합칠 엑셀 파일">
+  <div class="row" style="margin-top:8px"><button id="merge-run" class="primary" type="button" disabled>📎 합친 엑셀 받기</button></div>
+  <pre id="merge-result"></pre>
+  <div class="error" id="exp-error"></div>
+  <div class="row end"><button type="button" data-close>닫기</button></div>
+</dialog>
+
+<dialog id="dlg-backup">
+  <h2>백업 · 복원</h2>
+  <p class="small">기록은 이 브라우저에만 있어서, <b>브라우저 기록(사이트 데이터) 삭제, 시크릿 창, 다른 PC·브라우저</b>에서는 보이지 않습니다. 가끔 백업 파일을 받아 두세요. 다른 PC에서 이어서 하려면 거기서 복원하면 됩니다.</p>
+  <div class="row"><button id="bk-save" class="primary" type="button">⬇ 내 기록 백업 (.json)</button>
+    <label class="row small" for="bk-file">복원: <input type="file" id="bk-file" accept=".json"></label></div>
+  <pre id="backup-result"></pre>
+  <div class="row end"><button type="button" data-close>닫기</button></div>
+</dialog>
+
+<dialog id="dlg-help">
+  <h2>사용법 · 단축키</h2>
+  <table class="keys">
+    <tr><td>드래그</td><td>비프 구간 지정 (0~100 ms, 1 ms 단위, 파일당 1구간)</td></tr>
+    <tr><td>클릭</td><td>클릭 지점 중심 ±50 ms, 100 ms 구간 선택</td></tr>
+    <tr><td>가장자리 드래그</td><td>시작/끝 조정 (최대 100 ms 유지)</td></tr>
+    <tr><td>구간 안 드래그</td><td>구간 이동</td></tr>
+    <tr><td>시간축 클릭</td><td>재생 커서 이동</td></tr>
+    <tr><td>Space / Enter</td><td>전체 듣기(커서부터) / 구간만 듣기</td></tr>
+    <tr><td>Esc</td><td>정지</td></tr>
+    <tr><td>[ ]  ; '</td><td>구간 시작 / 끝 ∓1 ms (Shift: 10 ms)</td></tr>
+    <tr><td>A / Delete</td><td>자동 제안 적용 / 비프 없음</td></tr>
+    <tr><td>휠, Shift+휠</td><td>확대·축소, 좌우 이동</td></tr>
+    <tr><td>= - F B T</td><td>확대 / 축소 / 전체 보기 / 스펙트로그램 크게 / 테마</td></tr>
+    <tr><td>R</td><td>검수 완료 + 다음 파일</td></tr>
+    <tr><td>N P (↓ ↑)</td><td>다음 / 이전 파일</td></tr>
+    <tr><td>Ctrl+S, Ctrl+Z</td><td>저장(자동 저장도 됨), 실행 취소</td></tr>
+  </table>
+  <p class="muted small">브라우저는 보안상 폴더 위치를 기억할 수 없어서, 다시 로그인하면 같은 WAV 폴더를 한 번 다시 선택해야 합니다. 라벨·메모·이력은 그대로 이어집니다. 크롬 또는 엣지를 권장합니다.</p>
+  <div class="row end"><button type="button" data-close>닫기</button></div>
+</dialog>
+<div id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script>
+"use strict";
+/* ============================================================================
+   Beep Labeler (web). Everything runs in this browser: WAV decoding, beep
+   detection, labels and history (IndexedDB), Excel export/merge. Nothing is uploaded.
+   The Excel layout matches the desktop (Python) version, so files from both merge.
+   ========================================================================== */
+const VERSION = "web-0.5.0";
+const $ = (id) => document.getElementById(id);
+const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const pad2 = (n) => String(n).padStart(2, "0");
+function now() { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`; }
+const stamp = () => { const d = new Date(); return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}_${pad2(d.getHours())}${pad2(d.getMinutes())}`; };
+const r6 = (x) => Math.round(x * 1e6) / 1e6;
+const regionText = (s, e) => (s == null ? "비프 없음" : `${s.toFixed(3)}~${e.toFixed(3)}초`);
+const rint = (x) => { const f = Math.floor(x), d = x - f; return d > 0.5 ? f + 1 : d < 0.5 ? f : (f % 2 === 0 ? f : f + 1); }; // numpy-style round-half-even
+let toastT;
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 3200); }
+function ask(title, text, yes = "확인") {
+  return new Promise((ok) => {
+    $("cf-title").textContent = title; $("cf-text").textContent = text; $("cf-yes").textContent = yes;
+    const d = $("dlg-confirm");
+    const done = (v) => { d.close(); ok(v); };
+    $("cf-yes").onclick = () => done(true); $("cf-no").onclick = () => done(false); d.oncancel = () => ok(false);
+    d.showModal();
+  });
+}
+document.querySelectorAll("dialog [data-close]").forEach((b) => (b.onclick = () => b.closest("dialog").close()));
+
+/* ============================== storage ============================== */
+const MAX_MS = 100, FRAME_MS = 100, AGREE_TOL_MS = 20;
+const Store = (() => {
+  let db = null, mem = null;
+  const open = () => new Promise((ok) => {
+    try {
+      const rq = indexedDB.open("beeplabel", 1);
+      rq.onupgradeneeded = () => {
+        const d = rq.result;
+        d.createObjectStore("users", { keyPath: "id" });
+        d.createObjectStore("labels", { keyPath: "key" }).createIndex("user", "user_id");
+        d.createObjectStore("audit", { keyPath: "id", autoIncrement: true }).createIndex("user", "user_id");
+        d.createObjectStore("auto", { keyPath: "key" });
+      };
+      rq.onsuccess = () => { db = rq.result; ok(true); };
+      rq.onerror = () => ok(false);
+      rq.onblocked = () => ok(false);
+    } catch (e) { ok(false); }
+  });
+  function memStore() { return { users: new Map(), labels: new Map(), audit: new Map(), auto: new Map(), seq: 1 }; }
+  const req = (r) => new Promise((ok, fail) => { r.onsuccess = () => ok(r.result); r.onerror = () => fail(r.error); });
+  const tx = (name, mode = "readonly") => db.transaction(name, mode).objectStore(name);
+  return {
+    async init() { const ok = await open(); if (!ok) mem = memStore(); try { navigator.storage?.persist?.(); } catch (e) {} return ok; },
+    get volatile() { return !!mem; },
+    async get(store, key) { if (mem) return mem[store].get(key) ?? null; return (await req(tx(store).get(key))) ?? null; },
+    async put(store, val) {
+      if (mem) { if (store === "audit" && val.id == null) val.id = mem.seq++; mem[store].set(val[store === "audit" ? "id" : "key"] ?? val.id, val); return val.id; }
+      return req(tx(store, "readwrite").put(val));
+    },
+    async byUser(store, uid) { if (mem) return [...mem[store].values()].filter((v) => v.user_id === uid); return req(tx(store).index("user").getAll(uid)); },
+    async del(store, key) { if (mem) { mem[store].delete(key); return; } return req(tx(store, "readwrite").delete(key)); },
+  };
+})();
+const lkey = (uid, folder, file) => `${uid}\u0001${folder}\u0001${file}`;
+
+async function getUser(uid) { return Store.get("users", uid); }
+async function putUser(u) { u.key = u.id; await Store.put("users", u); }
+async function log(uid, action, { dataset = null, file = null, before = null, after = null, detail = null } = {}) {
+  await Store.put("audit", { ts: now(), user_id: uid, dataset, file, action, before, after, detail });
+}
+async function myAudit(uid) { return (await Store.byUser("audit", uid)).sort((a, b) => a.id - b.id); }
+
+/** Upsert a label; writes one history row per kind of change (same rules as the desktop app). */
+async function saveLabel(uid, folder, file, f) {
+  const key = lkey(uid, folder, file), t = now();
+  const old = await Store.get("labels", key);
+  const acts = [];
+  const txt = regionText(f.start_s, f.end_s);
+  if (!old) acts.push([f.start_sample != null ? "구간 지정" : "비프 없음 지정", null, txt]);
+  else if (old.start_sample !== f.start_sample || old.end_sample !== f.end_sample) {
+    const act = f.start_sample == null ? "구간 삭제(비프 없음)" : old.start_sample == null ? "구간 지정" : "구간 수정";
+    acts.push([act, regionText(old.start_s, old.end_s), txt]);
+  }
+  if (old && (old.memo || "") !== (f.memo || "")) acts.push(["메모 수정", old.memo || "", f.memo || ""]);
+  else if (!old && f.memo) acts.push(["메모 작성", "", f.memo]);
+  if (!!(old && old.reviewed) !== !!f.reviewed) acts.push([f.reviewed ? "검수 완료" : "검수 취소", null, txt]);
+  const rec = { ...(old || { created_at: t, n_edits: 0 }), key, dataset: folder, file, user_id: uid, ...f,
+    reviewed: f.reviewed ? 1 : 0, n_edits: (old ? old.n_edits : 0) + acts.length, updated_at: acts.length || !old ? t : old.updated_at };
+  if (!old || acts.length) await Store.put("labels", rec);
+  for (const [a, b, c] of acts) await log(uid, a, { dataset: folder, file, before: b, after: c });
+  return { label: rec, actions: acts.map((a) => a[0]) };
+}
+
+/* ============================== audio ============================== */
+function parseWav(buf) {
+  const v = new DataView(buf);
+  const str = (o, n) => String.fromCharCode(...new Uint8Array(buf, o, n));
+  if (buf.byteLength < 12 || str(0, 4) !== "RIFF" || str(8, 4) !== "WAVE") throw new Error("WAV 형식이 아닙니다");
+  let o = 12, fmt = null, dataOff = -1, dataLen = 0;
+  while (o + 8 <= buf.byteLength) {
+    const id = str(o, 4); let len = v.getUint32(o + 4, true);
+    if (id === "fmt ") {
+      let tag = v.getUint16(o + 8, true);
+      const ch = v.getUint16(o + 10, true), sr = v.getUint32(o + 12, true), bits = v.getUint16(o + 22, true);
+      if (tag === 0xfffe && len >= 26) tag = v.getUint16(o + 32, true);
+      fmt = { tag, ch, sr, bits };
+    } else if (id === "data") { dataOff = o + 8; dataLen = Math.min(len, buf.byteLength - dataOff); break; }
+    o += 8 + len + (len & 1);
+  }
+  if (!fmt || dataOff < 0) throw new Error("WAV 헤더를 읽을 수 없습니다");
+  return { ...fmt, dataOff, dataLen };
+}
+function decodeWav(buf) {
+  const h = parseWav(buf), v = new DataView(buf), B = h.bits / 8;
+  if (![1, 3].includes(h.tag) || !(h.tag === 1 ? [8, 16, 24, 32] : [32, 64]).includes(h.bits)) throw new Error(`지원하지 않는 WAV 형식 (format ${h.tag}, ${h.bits}bit)`);
+  const n = Math.floor(h.dataLen / (B * h.ch));
+  const chans = Array.from({ length: h.ch }, () => new Float32Array(n));
+  let p = h.dataOff;
+  for (let i = 0; i < n; i++) for (let c = 0; c < h.ch; c++, p += B) {
+    let x;
+    if (h.tag === 3) x = h.bits === 32 ? v.getFloat32(p, true) : v.getFloat64(p, true);
+    else if (h.bits === 16) x = v.getInt16(p, true) / 32768;
+    else if (h.bits === 24) { let t = v.getUint8(p) | (v.getUint8(p + 1) << 8) | (v.getUint8(p + 2) << 16); if (t & 0x800000) t -= 0x1000000; x = t / 8388608; }
+    else if (h.bits === 32) x = v.getInt32(p, true) / 2147483648;
+    else x = (v.getUint8(p) - 128) / 128;
+    chans[c][i] = x;
+  }
+  const mono = new Float64Array(n);
+  for (const c of chans) for (let i = 0; i < n; i++) mono[i] += c[i] / h.ch;
+  return { sr: h.sr, n, chans, mono, subtype: h.tag === 3 ? `FLOAT${h.bits}` : `PCM_${h.bits}` };
+}
+async function wavInfo(file) {
+  const h = parseWav(await file.slice(0, Math.min(file.size, 1 << 20)).arrayBuffer());
+  const B = h.bits / 8;
+  const len = Math.min(file.size - h.dataOff, (h.dataLen === 0 || h.dataOff + h.dataLen >= (1 << 20)) ? file.size - h.dataOff : h.dataLen);
+  return { sr: h.sr, n: Math.floor(Math.max(0, len) / (B * h.ch)), ch: h.ch };
+}
+async function sha256hex(buf) {
+  const d = await crypto.subtle.digest("SHA-256", buf);
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+function frameBounds(n, sr) {
+  const step = sr * FRAME_MS / 1000, nFull = Math.floor(n / step + 1e-9), edges = [];
+  for (let k = 0; k <= nFull; k++) { const e = rint(k * step); if (e <= n) edges.push(e); }
+  if (edges[edges.length - 1] < n) edges.push(n);
+  return { starts: edges.slice(0, -1), ends: edges.slice(1) };
+}
+const maxLenOf = (sr) => rint(sr * MAX_MS / 1000);
+
+/* ============================== DSP ============================== */
+const twCache = new Map();
+function fft(re, im, inverse = false) {  // in-place radix-2
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) { let b = n >> 1; for (; j & b; b >>= 1) j ^= b; j ^= b; if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; } }
+  let tw = twCache.get(n);
+  if (!tw) { tw = { c: new Float64Array(n / 2), s: new Float64Array(n / 2) }; for (let k = 0; k < n / 2; k++) { tw.c[k] = Math.cos(2 * Math.PI * k / n); tw.s[k] = Math.sin(2 * Math.PI * k / n); } twCache.set(n, tw); }
+  const sg = inverse ? 1 : -1;
+  for (let len = 2; len <= n; len <<= 1) {
+    const half = len >> 1, st = n / len;
+    for (let i = 0; i < n; i += len) for (let k = 0; k < half; k++) {
+      const wr = tw.c[k * st], wi = sg * tw.s[k * st], a = i + k, b = a + half;
+      const xr = re[b] * wr - im[b] * wi, xi = re[b] * wi + im[b] * wr;
+      re[b] = re[a] - xr; im[b] = im[a] - xi; re[a] += xr; im[a] += xi;
+    }
+  }
+  if (inverse) for (let i = 0; i < n; i++) { re[i] /= n; im[i] /= n; }
+}
+const nextPow2 = (x) => 1 << Math.ceil(Math.log2(x));
+function smooth1(x, k) {  // centred moving average, edge replication
+  const n = x.length; if (k <= 1 || !n) return x;
+  const L = k >> 1, out = new Float64Array(n), c = new Float64Array(n + k);
+  const at = (i) => x[Math.min(n - 1, Math.max(0, i))];
+  let s = 0; c[0] = 0; for (let i = 0; i < n + k - 1; i++) { s += at(i - L); c[i + 1] = s; }
+  for (let i = 0; i < n; i++) out[i] = (c[i + k] - c[i]) / k;
+  return out;
+}
+function percentile(arr, q) {  // numpy linear interpolation
+  const a = Float64Array.from(arr).sort(); if (!a.length) return NaN;
+  const pos = (q / 100) * (a.length - 1), lo = Math.floor(pos), hi = Math.ceil(pos);
+  return a[lo] + (a[hi] - a[lo]) * (pos - lo);
+}
+const CFG = { fmin: 400, fmax: 8000, win_ms: 40, hop_ms: 5, smooth_time_ms: 20, smooth_freq_bins: 3, noise_pct: 25,
+  prom_half_hz: 400, peak_hi: 15, peak_lo: 12, prom_hi: 15, prom_lo: 10, min_event_ms: 30, merge_gap_ms: 20,
+  refine_drop_db: 15, refine_min_bw: 150, refine_rel_bw: 0.08 };
+const CFG_DIGEST = "web-" + VERSION;
+
+function computeFeatures(y, sr) {
+  const n = y.length, win = Math.max(16, rint(sr * CFG.win_ms / 1000)), nfft = nextPow2(win), hop = Math.max(1, rint(sr * CFG.hop_ms / 1000));
+  const T = n > 0 ? 1 + Math.floor((n - 1) / hop) : 0, padL = win >> 1;
+  const w = new Float64Array(win); for (let i = 0; i < win; i++) w[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (win - 1));
+  const fmax = Math.min(CFG.fmax, 0.98 * sr / 2), bins = [];
+  for (let k = 0; k <= nfft / 2; k++) { const f = k * sr / nfft; if (f >= CFG.fmin && f <= fmax) bins.push(k); }
+  if (bins.length < 3) throw new Error("샘플레이트가 너무 낮아 비프 대역을 분석할 수 없습니다");
+  const B = bins.length, spec = new Float64Array(T * B), re = new Float64Array(nfft), im = new Float64Array(nfft);
+  for (let t = 0; t < T; t++) {
+    re.fill(0); im.fill(0);
+    const s0 = t * hop - padL;
+    for (let i = 0; i < win; i++) { const j = s0 + i; if (j >= 0 && j < n) re[i] = y[j] * w[i]; }
+    fft(re, im);
+    for (let b = 0; b < B; b++) { const k = bins[b]; spec[t * B + b] = re[k] * re[k] + im[k] * im[k]; }
+  }
+  const ts = Math.max(1, rint(CFG.smooth_time_ms / CFG.hop_ms));
+  if (ts > 1) for (let b = 0; b < B; b++) { const col = new Float64Array(T); for (let t = 0; t < T; t++) col[t] = spec[t * B + b]; const sm = smooth1(col, ts); for (let t = 0; t < T; t++) spec[t * B + b] = sm[t]; }
+  if (CFG.smooth_freq_bins > 1) for (let t = 0; t < T; t++) { const sm = smooth1(spec.subarray(t * B, t * B + B), CFG.smooth_freq_bins); spec.set(sm, t * B); }
+  for (let i = 0; i < spec.length; i++) spec[i] = 10 * Math.log10(spec[i] + 1e-12);
+  const bg = new Float64Array(B);
+  for (let b = 0; b < B; b++) { const col = new Float64Array(T); for (let t = 0; t < T; t++) col[t] = spec[t * B + b]; bg[b] = percentile(col, CFG.noise_pct); }
+  const df = sr / nfft, guard = Math.ceil(2 * nfft / win) + (CFG.smooth_freq_bins >> 1) + 1, half = Math.max(guard + 4, rint(CFG.prom_half_hz / df));
+  const peak = new Float64Array(T), prom = new Float64Array(T), peakHz = new Float64Array(T), nb = [];
+  for (let t = 0; t < T; t++) {
+    let ip = 0, pv = -Infinity;
+    for (let b = 0; b < B; b++) { const v = spec[t * B + b] - bg[b]; if (v > pv) { pv = v; ip = b; } }
+    nb.length = 0;
+    for (let o = -half; o <= half; o++) { if (Math.abs(o) <= guard) continue; const b = ip + o; if (b >= 0 && b < B) nb.push(spec[t * B + b] - bg[b]); }
+    peak[t] = pv; prom[t] = nb.length ? pv - percentile(nb, 50) : NaN; peakHz[t] = bins[ip] * sr / nfft;
+  }
+  return { sr, n, hop, T, peak, prom, peakHz };
+}
+function bandEnvelope(x, sr, lo, hi, taper) {
+  const n = x.length, N = nextPow2(n + 4096), re = new Float64Array(N), im = new Float64Array(N);
+  re.set(x); fft(re, im);
+  for (let k = 0; k < N; k++) {
+    let m = 0;
+    if (k >= 1 && k < N / 2) {
+      const f = k * sr / N;
+      if (f >= lo && f <= hi) m = 1;
+      else if (f < lo && f > lo - taper) m = 0.5 + 0.5 * Math.cos(Math.PI * (lo - f) / taper);
+      else if (f > hi && f < hi + taper) m = 0.5 + 0.5 * Math.cos(Math.PI * (f - hi) / taper);
+      m *= 2;
+    }
+    re[k] *= m; im[k] *= m;
+  }
+  fft(re, im, true);
+  const env = new Float64Array(n); for (let i = 0; i < n; i++) env[i] = Math.hypot(re[i], im[i]);
+  return env;
+}
+function mergeEvents(evs, gap) {
+  evs = [...evs].sort((a, b) => a.start - b.start); const out = [];
+  for (const e of evs) {
+    const p = out[out.length - 1];
+    if (p && e.start - p.end <= gap) { const f = [p.f0, e.f0].filter((v) => v != null); out[out.length - 1] = { start: p.start, end: Math.max(p.end, e.end), f0: f.length ? f.reduce((a, b) => a + b) / f.length : null }; }
+    else out.push({ ...e });
+  }
+  return out;
+}
+function refine(y, sr, ev, search) {
+  if (ev.f0 == null) return ev;
+  const n = y.length, bw = Math.max(CFG.refine_min_bw, CFG.refine_rel_bw * ev.f0), lo = ev.f0 - bw / 2, hi = ev.f0 + bw / 2;
+  if (lo <= 20 || hi >= 0.99 * sr / 2) return ev;
+  const a = Math.max(0, ev.start - search), b = Math.min(n, ev.end + search);
+  const ca = Math.max(0, a - Math.floor(0.5 * sr)), cb = Math.min(n, b + Math.floor(0.5 * sr));
+  if (cb - ca < 64) return ev;
+  const env = smooth1(bandEnvelope(y.subarray(ca, cb), sr, lo, hi, bw / 2), Math.max(1, Math.floor(sr * 0.001)));
+  const coreA = ev.start - ca, coreB = ev.end - ca; if (coreB <= coreA) return ev;
+  const core = env.subarray(coreA, coreB), level = percentile(core, 50);
+  const outside = [...env.subarray(0, Math.max(0, coreA - (search >> 1))), ...env.subarray(coreB + (search >> 1))];
+  const noise = outside.length > sr * 0.02 ? percentile(outside, 20) : 0;
+  const thr = Math.max(level * Math.pow(10, -CFG.refine_drop_db / 20), 2 * noise);
+  if (thr >= level) return ev;
+  let anchor = coreA, mx = -Infinity; for (let i = coreA; i < coreB; i++) if (env[i] > mx) { mx = env[i]; anchor = i; }
+  if (!(env[anchor] >= thr)) return ev;
+  const loLim = a - ca, hiLim = b - ca; let s = anchor, e = anchor;
+  while (s > loLim && env[s - 1] >= thr) s--;
+  while (e < hiLim && env[e] >= thr) e++;
+  return { start: s + ca, end: e + ca, f0: ev.f0 };
+}
+function detect(y, sr) {
+  const F = computeFeatures(y, sr), { hop, n, T } = F, evs = [];
+  const strong = (t) => F.peak[t] >= CFG.peak_hi && F.prom[t] >= CFG.prom_hi;
+  const weak = (t) => F.peak[t] >= CFG.peak_lo && F.prom[t] >= CFG.prom_lo;
+  for (let t = 0; t < T;) {
+    if (!weak(t)) { t++; continue; }
+    let e = t; while (e < T && weak(e)) e++;
+    const hz = []; for (let i = t; i < e; i++) if (strong(i)) hz.push(F.peakHz[i]);
+    if (hz.length) evs.push({ start: Math.max(0, t * hop - (hop >> 1)), end: Math.min(n, (e - 1) * hop + hop - (hop >> 1)), f0: percentile(hz, 50) });
+    t = e;
+  }
+  const gap = rint(sr * CFG.merge_gap_ms / 1000), search = rint(sr * CFG.win_ms / 1000), minLen = rint(sr * CFG.min_event_ms / 1000);
+  let out = mergeEvents(evs, gap);
+  out = mergeEvents(out.map((e) => refine(y, sr, e, search)), gap);
+  return out.filter((e) => e.end - e.start >= minLen);
+}
+function suggestRegion(evs, n, sr) {
+  if (!evs.length) return { start_sample: null, end_sample: null, start_s: null, end_s: null };
+  const e = evs.reduce((a, b) => (b.start < a.start ? b : a)), s = Math.max(0, e.start), en = Math.min(e.end, s + maxLenOf(sr), n);
+  return { start_sample: s, end_sample: en, start_s: r6(s / sr), end_s: r6(en / sr) };
+}
+function spectrogram(y, sr) {
+  const nfft = sr >= 32000 ? 1024 : 512, hop = Math.max(nfft / 8, Math.ceil(y.length / 4000)), T = Math.max(1, 1 + Math.floor((y.length - 1) / hop));
+  let K = 0; for (let k = 0; k <= nfft / 2; k++) if (k * sr / nfft <= Math.min(8000, sr / 2)) K = k + 1;
+  const w = new Float64Array(nfft); for (let i = 0; i < nfft; i++) w[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (nfft - 1));
+  const db = new Float32Array(T * K), re = new Float64Array(nfft), im = new Float64Array(nfft);
+  for (let t = 0; t < T; t++) {
+    re.fill(0); im.fill(0); const s0 = t * hop - nfft / 2;
+    for (let i = 0; i < nfft; i++) { const j = s0 + i; if (j >= 0 && j < y.length) re[i] = y[j] * w[i]; }
+    fft(re, im);
+    for (let k = 0; k < K; k++) db[t * K + k] = 10 * Math.log10(re[k] * re[k] + im[k] * im[k] + 1e-12);
+  }
+  const sample = []; for (let i = 0; i < db.length; i += Math.max(1, Math.floor(db.length / 20000))) sample.push(db[i]);
+  const top = percentile(sample, 99.9), img = new Uint8ClampedArray(T * K);
+  for (let i = 0; i < db.length; i++) img[i] = Math.max(0, Math.min(255, ((db[i] - (top - 80)) / 80) * 255));
+  return { img, T, K, hop, fmax: (K - 1) * sr / nfft };
+}
+async function autoRegion(sha, y, sr) {
+  const key = sha + "|" + CFG_DIGEST;
+  const c = await Store.get("auto", key); if (c) return c;
+  const r = { key, ...suggestRegion(detect(y, sr), y.length, sr) };
+  await Store.put("auto", r); return r;
+}
+
+/* ============================== state ============================== */
+const S = { me: null, folder: null, files: [], idx: -1, view: null, region: null, reviewed: false, memo: "", hasLabel: false,
+  saved: null, saveTimer: null, saving: null, v0: 0, v1: 1, cursor: 0, hoverX: -1, undo: [], redo: [], big: false, gain: 1,
+  specImg: null, history: [], histEdit: false, playEnd: null };
+const myLabels = new Map();   // file -> label (current folder, me)
+
+/* ============================== theme ============================== */
+let C = {};
+function readColors() { const cs = getComputedStyle(document.documentElement); for (const k of ["bg", "track", "wave", "grid", "text", "frame", "frame-on", "region", "region-line", "auto", "cursor", "play"]) C[k] = cs.getPropertyValue("--c-" + k).trim(); }
+function isDark() { const a = document.documentElement.dataset.theme; return a ? a === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; }
+async function toggleTheme() {
+  const t = isDark() ? "light" : "dark"; document.documentElement.dataset.theme = t; readColors(); draw();
+  if (S.me) { S.me.theme = t; await putUser(S.me); }
+}
+document.querySelectorAll(".theme-btn").forEach((b) => (b.onclick = toggleTheme));
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { readColors(); draw(); });
+readColors();
+
+/* ============================== login ============================== */
+const ID_RE = /^[A-Za-z0-9_.\-]{2,32}$/;
+function showLogin() {
+  $("app").hidden = true; $("login").hidden = false; stop();
+  $("lg-new").hidden = true; $("lg-submit").textContent = "로그인"; $("lg-error").textContent = "";
+  $("lg-id").focus();
+}
+$("lg-id").oninput = () => { $("lg-new").hidden = true; $("lg-submit").textContent = "로그인"; $("lg-error").textContent = ""; };
+$("login-form").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const id = $("lg-id").value.trim();
+  if (!ID_RE.test(id)) { $("lg-error").textContent = "아이디는 영문/숫자/._- 2~32자로 입력하세요."; return; }
+  let u = await getUser(id);
+  if (!u) {
+    if ($("lg-new").hidden) { $("lg-new-id").textContent = id; $("lg-new").hidden = false; $("lg-submit").textContent = "새 아이디로 시작"; $("lg-name").focus(); return; }
+    u = { id, display_name: $("lg-name").value.trim().slice(0, 40) || id, created_at: now(), last_login: null, theme: null, last_file: null, folder_name: null };
+    await putUser(u); await log(id, "아이디 생성", { detail: u.display_name !== id ? u.display_name : null });
+  }
+  u.last_login = now(); await putUser(u); await log(id, "로그인");
+  try { localStorage.setItem("bl-session", id); } catch (e) {}
+  $("lg-name").value = "";
+  await startApp(u);
+};
+async function logout() {
+  await flushSave();
+  if (S.me) await log(S.me.id, "저장 후 로그아웃");
+  try { localStorage.removeItem("bl-session"); } catch (e) {}
+  S.me = null; S.view = null; S.idx = -1; S.files = []; S.folder = null; myLabels.clear();
+  showLogin();
+}
+$("btn-logout").onclick = logout;
+
+async function startApp(u) {
+  S.me = u;
+  if (u.theme) document.documentElement.dataset.theme = u.theme;
+  readColors();
+  $("login").hidden = true; $("app").hidden = false;
+  $("who").textContent = u.display_name === u.id ? u.id : `${u.display_name} (${u.id})`;
+  $("last-folder").textContent = u.folder_name ? `지난번 폴더: ${u.folder_name}` : "";
+  S.files = []; S.view = null; renderFiles(); resize(); showEmpty();
+  if (Store.volatile) toast("이 브라우저에서 저장소를 쓸 수 없어 기록이 저장되지 않습니다. 작업 후 꼭 엑셀로 내보내세요.");
+}
+function showEmpty(msg) {
+  const e = $("empty");
+  const has = !!S.view;
+  e.hidden = has; $("wrap").hidden = !has; $("region-bar").hidden = !has;
+  if (!has) e.innerHTML = msg || (S.files.length ? "왼쪽에서 파일을 고르세요."
+    : `<b>WAV 폴더를 선택하세요.</b> 왼쪽 위 <b>📁 WAV 폴더 선택</b>을 누르거나 폴더를 끌어다 놓으세요. 내 PC 폴더나 NAS 폴더 모두 됩니다.` +
+      (S.me?.folder_name ? `<br>지난번에 작업한 폴더: <code>${esc(S.me.folder_name)}</code> — 같은 폴더를 다시 선택하면 이전 작업이 이어집니다.` : ""));
+}
+
+/* ============================== folder ============================== */
+$("btn-folder").onclick = () => $("folder-input").click();
+$("folder-input").onchange = () => { const fs = [...$("folder-input").files]; $("folder-input").value = ""; loadFolder(fs.map((f) => ({ file: f, path: f.webkitRelativePath || f.name }))); };
+const drop = $("drop");
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = async (e) => {
+  e.preventDefault(); drop.classList.remove("over");
+  const items = [...e.dataTransfer.items].map((i) => i.webkitGetAsEntry?.()).filter(Boolean), out = [];
+  const walk = (ent, p) => new Promise((ok) => {
+    if (ent.isFile) ent.file((f) => { out.push({ file: f, path: p + ent.name }); ok(); }, () => ok());
+    else { const r = ent.createReader(), all = []; const next = () => r.readEntries(async (es) => { if (!es.length) { for (const x of all) await walk(x, p + ent.name + "/"); ok(); } else { all.push(...es); next(); } }, () => ok()); next(); }
+  });
+  for (const it of items) await walk(it, "");
+  loadFolder(out);
+};
+async function loadFolder(entries) {
+  await flushSave(); stop();
+  const wav = entries.filter((x) => /\.wav$/i.test(x.path));
+  if (!wav.length) { toast("WAV 파일이 없는 폴더입니다."); return; }
+  const root = wav[0].path.includes("/") ? wav[0].path.split("/")[0] : "(선택한 파일)";
+  const files = wav.map((x) => ({ rel: x.path.includes("/") ? x.path.split("/").slice(1).join("/") : x.path, file: x.file, info: null }))
+    .filter((f) => !f.rel.split("/").some((p) => p.startsWith(".")))
+    .sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+  const prev = S.me.folder_name;
+  S.folder = root; S.files = files; S.idx = -1; S.view = null;
+  if (prev !== root) { await log(S.me.id, "데이터 폴더 변경", { before: prev, after: root, detail: `WAV ${files.length}개` }); S.me.folder_name = root; await putUser(S.me); }
+  if (prev && prev !== root) toast(`지난번 폴더(${prev})와 이름이 다릅니다. 기록은 폴더 이름별로 따로 저장됩니다.`);
+  myLabels.clear();
+  for (const l of await Store.byUser("labels", S.me.id)) if (l.dataset === root) myLabels.set(l.file, l);
+  $("folder-label").textContent = `📁 ${root} (${files.length}개)`; $("last-folder").textContent = "";
+  renderFiles(); showEmpty();
+  const last = files.findIndex((f) => f.rel === S.me.last_file);
+  const first = last >= 0 ? last : Math.max(0, files.findIndex((f) => !(myLabels.get(f.rel)?.reviewed)));
+  openFile(first);
+  for (const f of files) { try { f.info = await wavInfo(f.file); } catch (e) { f.info = { error: e.message }; } }
+  renderFiles();
+}
+
+/* ============================== file list ============================== */
+function statusOf(rel) { const l = myLabels.get(rel); return l ? (l.reviewed ? "reviewed" : "draft") : "none"; }
+function renderFiles() {
+  const q = $("filter").value.toLowerCase(), sf = $("status-filter").value, ul = $("files");
+  ul.innerHTML = "";
+  S.files.forEach((f, i) => {
+    const st = statusOf(f.rel);
+    if (q && !f.rel.toLowerCase().includes(q)) return;
+    if (sf && st !== sf) return;
+    const l = myLabels.get(f.rel), li = document.createElement("li");
+    li.dataset.idx = i; li.className = i === S.idx ? "active" : "";
+    const dur = f.info && !f.info.error ? (f.info.n / f.info.sr).toFixed(1) + "s" : f.info?.error ? "⚠" : "";
+    li.innerHTML = `<span class="dot ${st}"></span><span class="name" title="${esc(f.rel)}">${esc(f.rel)}</span><span class="dur">${dur}</span>` +
+      (l ? `<span class="reg">${esc(regionText(l.start_s, l.end_s))}</span>` : "");
+    li.onclick = () => openFile(i); ul.appendChild(li);
+  });
+  const done = S.files.filter((f) => statusOf(f.rel) === "reviewed").length;
+  $("progress").textContent = S.files.length ? `내 검수 ${done} / ${S.files.length}` : "폴더 없음";
+}
+$("filter").oninput = renderFiles; $("status-filter").onchange = renderFiles;
+
+/* ============================== canvas ============================== */
+const cv = $("cv"), ctx = cv.getContext("2d");
+let W = 0, H = 0, DPR = 1, P = {};
+function resize() {
+  const r = cv.getBoundingClientRect(); DPR = window.devicePixelRatio || 1; W = r.width; H = r.height;
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  const axis = 20, frames = 26, wave = S.big ? 110 : 56, spec = Math.max(60, H - axis - frames - wave - 6);
+  P = { wave: [0, wave], spec: [wave + 2, wave + 2 + spec], frames: [wave + 4 + spec, wave + 4 + spec + frames] };
+  P.axis = [P.frames[1] + 2, P.frames[1] + 2 + axis];
+  draw();
+}
+new ResizeObserver(resize).observe($("wrap"));
+const nS = () => (S.view ? S.view.n : 0);
+const xOf = (s) => ((s - S.v0) / (S.v1 - S.v0)) * W;
+const sOf = (x) => Math.round(S.v0 + (x / W) * (S.v1 - S.v0));
+const clampS = (s) => Math.max(0, Math.min(nS(), s));
+const msOf = (n) => 1000 * n / S.view.sr;
+const maxLen = () => maxLenOf(S.view.sr);
+const regionAt = (y) => Object.keys(P).find((k) => y >= P[k][0] && y < P[k][1]) || null;
+function lowerBound(a, v) { let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < v) lo = m + 1; else hi = m; } return lo; }
+const nF = () => S.view.fb.starts.length;
+function frameAt(s) { return Math.min(lowerBound(S.view.fb.ends, s + 1), nF() - 1); }
+function boundary(k) { return k < nF() ? S.view.fb.starts[k] : S.view.fb.ends[nF() - 1]; }
+function regText(r) { if (!r) return S.hasLabel || S.reviewed ? "비프 없음" : "지정 안 됨"; return `${(r[0] / S.view.sr).toFixed(3)} ~ ${(r[1] / S.view.sr).toFixed(3)}초`; }
+function centered(c) { const L = Math.min(maxLen(), nS()); const s = Math.max(0, Math.min(nS() - L, Math.round(c) - Math.floor(L / 2))); return [s, s + L]; }
+
+const LUT = (() => {
+  const st = [[0, [8, 8, 20]], [0.25, [40, 20, 90]], [0.5, [150, 40, 110]], [0.75, [245, 120, 40]], [1, [252, 250, 180]]], lut = new Uint8ClampedArray(768);
+  for (let i = 0; i < 256; i++) { const t = i / 255; let k = 0; while (k < st.length - 2 && t > st[k + 1][0]) k++; const [t0, c0] = st[k], [t1, c1] = st[k + 1], u = (t - t0) / (t1 - t0); for (let j = 0; j < 3; j++) lut[i * 3 + j] = c0[j] + u * (c1[j] - c0[j]); }
+  return lut;
+})();
+function buildSpecImage() {
+  const sp = S.view.spec, off = document.createElement("canvas"); off.width = sp.T; off.height = sp.K;
+  const oc = off.getContext("2d"), im = oc.createImageData(sp.T, sp.K);
+  for (let t = 0; t < sp.T; t++) for (let f = 0; f < sp.K; f++) { const v = sp.img[t * sp.K + f], p = ((sp.K - 1 - f) * sp.T + t) * 4; im.data[p] = LUT[v * 3]; im.data[p + 1] = LUT[v * 3 + 1]; im.data[p + 2] = LUT[v * 3 + 2]; im.data[p + 3] = 255; }
+  oc.putImageData(im, 0, 0); S.specImg = off;
+}
+function draw() {
+  if (!W) return;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  if (!S.view) return;
+  const V = S.view, [wy0, wy1] = P.wave, [sy0, sy1] = P.spec, [fy0, fy1] = P.frames, [ay0] = P.axis, sp = V.spec;
+  if (S.specImg) {
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(S.specImg, S.v0 / sp.hop, 0, (S.v1 - S.v0) / sp.hop, sp.K, 0, sy0, W, sy1 - sy0);
+    ctx.font = "10px " + getComputedStyle(document.body).fontFamily; ctx.fillStyle = "rgba(255,255,255,.75)";
+    const st = sy1 - sy0 > 200 ? 1000 : 2000;
+    for (let f = st; f < sp.fmax; f += st) ctx.fillText(`${f / 1000}k`, 3, sy1 - (f / sp.fmax) * (sy1 - sy0) + 3);
+  }
+  ctx.fillStyle = C.track; ctx.fillRect(0, wy0, W, wy1 - wy0);
+  const wv = V.wave, mid = (wy0 + wy1) / 2, amp = (wy1 - wy0) / 2 * S.gain; ctx.fillStyle = C.wave;
+  for (let x = 0; x < W; x++) {
+    const a = Math.floor(sOf(x) / wv.step), b = Math.max(a + 1, Math.floor(sOf(x + 1) / wv.step));
+    if (b <= 0 || a >= wv.min.length) continue;
+    let lo = 1, hi = -1; for (let i = Math.max(0, a); i < Math.min(b, wv.min.length); i++) { if (wv.min[i] < lo) lo = wv.min[i]; if (wv.max[i] > hi) hi = wv.max[i]; }
+    const y0 = Math.max(wy0, mid - hi * amp), y1 = Math.min(wy1, mid - lo * amp); ctx.fillRect(x, y0, 1, Math.max(1, y1 - y0));
+  }
+  const st = V.fb.starts, en = V.fb.ends, f0 = frameAt(S.v0), f1 = frameAt(Math.max(0, S.v1 - 1)), fw = xOf(en[0]) - xOf(st[0]);
+  if (fw > 5) { ctx.strokeStyle = C.grid; for (let i = f0; i <= f1; i++) { const x = Math.round(xOf(st[i])) + 0.5; ctx.beginPath(); ctx.moveTo(x, wy0); ctx.lineTo(x, fy1); ctx.stroke(); } }
+  const au = V.auto;
+  if (au && au.start_sample != null) {
+    const x0 = xOf(au.start_sample), x1 = xOf(au.end_sample);
+    ctx.strokeStyle = C.auto; ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.strokeRect(x0 + 1, wy0 + 1, x1 - x0 - 2, sy1 - wy0 - 2); ctx.setLineDash([]); ctx.lineWidth = 1;
+    ctx.fillStyle = C.auto; ctx.font = "10px sans-serif"; ctx.fillText("자동", x0 + 3, sy1 - 5);
+  }
+  if (S.region) {
+    const x0 = xOf(S.region[0]), x1 = xOf(S.region[1]);
+    ctx.fillStyle = C.region; ctx.fillRect(x0, wy0, x1 - x0, fy1 - wy0);
+    ctx.strokeStyle = C["region-line"]; ctx.lineWidth = 2; for (const x of [x0, x1]) { ctx.beginPath(); ctx.moveTo(x, wy0); ctx.lineTo(x, fy1); ctx.stroke(); } ctx.lineWidth = 1;
+    ctx.fillStyle = C["region-line"]; ctx.font = "600 11px 'IBM Plex Mono', monospace";
+    ctx.fillText(`${regText(S.region)} (${msOf(S.region[1] - S.region[0]).toFixed(0)}ms)`, Math.max(2, x0 + 4), wy0 + 12);
+  }
+  ctx.fillStyle = C.track; ctx.fillRect(0, fy0, W, fy1 - fy0);
+  for (let i = f0; i <= f1; i++) {
+    const x0 = xOf(st[i]), w = Math.max(1, xOf(en[i]) - x0 - (fw > 4 ? 1 : 0));
+    ctx.fillStyle = C.frame; ctx.fillRect(x0, fy0 + 2, w, fy1 - fy0 - 4);
+    if (S.region && S.region[0] < en[i] && S.region[1] > st[i]) { const a = xOf(Math.max(st[i], S.region[0])), b = xOf(Math.min(en[i], S.region[1])); ctx.fillStyle = C["frame-on"]; ctx.fillRect(a, fy0 + 2, Math.max(1, b - a), fy1 - fy0 - 4); }
+    if (fw > 22) { ctx.fillStyle = C.text; ctx.font = "9px 'IBM Plex Mono', monospace"; ctx.fillText(i, x0 + 3, fy1 - 8); }
+  }
+  const span = (S.v1 - S.v0) / V.sr, tick = [0.1, 0.2, 0.5, 1, 2, 5, 10, 30, 60].find((s) => s * W / span >= 60) || 60;
+  ctx.fillStyle = C.text; ctx.strokeStyle = C.grid; ctx.font = "10px 'IBM Plex Mono', monospace";
+  for (let t = Math.ceil(S.v0 / V.sr / tick - 1e-9) * tick; t <= S.v1 / V.sr + 1e-9; t += tick) { const x = xOf(t * V.sr); ctx.beginPath(); ctx.moveTo(x, ay0); ctx.lineTo(x, ay0 + 5); ctx.stroke(); ctx.fillText(tick < 1 ? t.toFixed(1) + "s" : t.toFixed(0) + "s", x + 2, ay0 + 15); }
+  const vline = (x, c, w = 1) => { ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, fy1); ctx.stroke(); ctx.lineWidth = 1; };
+  vline(xOf(S.cursor) + 0.5, C.cursor);
+  if (A.playing) vline(xOf(A.pos() * V.sr), C.play, 2);
+  if (S.hoverX >= 0) vline(S.hoverX + 0.5, C.auto);
+}
+
+/* ============================== panels ============================== */
+function refreshPanels() {
+  if (!S.view) return;
+  $("region-text").textContent = regText(S.region);
+  const tooLong = S.region && S.region[1] - S.region[0] > maxLen();
+  $("region-detail").textContent = S.region ? `길이 ${msOf(S.region[1] - S.region[0]).toFixed(1)} ms (최대 ${MAX_MS} ms) · 샘플 [${S.region[0]}, ${S.region[1]})` : "";
+  $("file-state").innerHTML = S.reviewed ? `<span style="color:var(--ok)">● 검수 완료</span>` : S.hasLabel ? `<span style="color:var(--draft)">● 작업 중</span>` : `<span class="muted">○ 미작업</span>`;
+  const au = S.view.auto;
+  $("auto-info").innerHTML = au == null ? "분석 중…" : au.start_sample != null ? `${au.start_s.toFixed(3)} ~ ${au.end_s.toFixed(3)}초 <span class="muted small">(파란 점선)</span>` : "탐지된 비프 없음";
+  $("btn-play-seg").disabled = !S.region;
+  if (tooLong) $("region-detail").textContent += " ⚠ 100 ms를 넘습니다";
+  updateStatus();
+}
+function updateStatus() {
+  if (!S.view) { $("status").textContent = ""; return; }
+  const s = clampS(S.hoverX >= 0 ? sOf(S.hoverX) : S.cursor), i = frameAt(s);
+  $("status").textContent = `커서 ${(s / S.view.sr).toFixed(3)}s · 100ms 칸 #${i} (${(boundary(i) / S.view.sr).toFixed(1)}–${(boundary(i + 1) / S.view.sr).toFixed(1)}s) · ${S.view.sr} Hz · ${S.view.chans.length}ch`;
+}
+const setSave = (t, warn = false) => { $("save-state").textContent = t; $("save-state").style.color = warn ? "var(--warn)" : ""; };
+
+async function loadHistory() {
+  if (!S.view) return;
+  const f = S.files[S.idx].rel;
+  S.history = (await myAudit(S.me.id)).filter((a) => a.dataset === S.folder && a.file === f).reverse();
+  renderHistory();
+}
+function renderHistory() {
+  const ed = S.histEdit; $("hist-tools").hidden = !ed; $("btn-hist-edit").hidden = ed;
+  $("history").innerHTML = S.history.length ? S.history.map((a) =>
+    `<li>${ed ? `<input type="checkbox" class="hc" value="${a.id}" aria-label="이력 선택">` : ""}<div><span class="t">${esc(a.ts)}</span>${esc(a.action)}` +
+    (a.before || a.after ? `: ${a.before ? esc(a.before) + " → " : ""}${esc(a.after || "")}` : "") + `</div></li>`).join("") : `<li class="muted">아직 없음</li>`;
+  $("history").querySelectorAll(".hc").forEach((c) => (c.onchange = histCount)); histCount();
+}
+function histCount() { const n = $("history").querySelectorAll(".hc:checked").length; $("btn-hist-del").disabled = !n; $("btn-hist-del").textContent = n ? `선택 삭제 (${n})` : "선택 삭제"; }
+$("btn-hist-edit").onclick = () => { S.histEdit = true; renderHistory(); };
+$("btn-hist-cancel").onclick = () => { S.histEdit = false; renderHistory(); };
+$("btn-hist-del").onclick = async () => {
+  const ids = [...$("history").querySelectorAll(".hc:checked")].map((c) => +c.value);
+  if (!ids.length || !(await ask("작업 이력 삭제", `선택한 작업 이력 ${ids.length}건을 삭제할까요?\n되돌릴 수 없고 엑셀·CSV에서도 빠집니다.\n(비프 구간·메모 등 라벨은 바뀌지 않습니다)`, "삭제"))) return;
+  const mine = new Set(S.history.map((h) => h.id));
+  for (const id of ids) if (mine.has(id)) await Store.del("audit", id);
+  S.histEdit = false; toast(`작업 이력 ${ids.length}건 삭제됨`); loadHistory();
+};
+
+/* ============================== open / save ============================== */
+const stateJSON = () => JSON.stringify({ r: S.region, v: S.reviewed, m: S.memo, h: S.hasLabel });
+const isDirty = () => !!S.view && S.saved !== null && stateJSON() !== S.saved;
+async function openFile(i) {
+  if (i < 0 || i >= S.files.length) return;
+  await flushSave(); stop();
+  S.idx = i; renderFiles();
+  const f = S.files[i];
+  $("file-title").textContent = f.rel; setSave("불러오는 중…");
+  let V;
+  try {
+    const buf = await f.file.arrayBuffer();
+    const d = decodeWav(buf), sha = await sha256hex(buf), fb = frameBounds(d.n, d.sr);
+    const step = Math.max(1, Math.ceil(d.n / 20000)), nb = Math.floor(d.n / step), mn = new Float32Array(nb), mx = new Float32Array(nb);
+    for (let b = 0; b < nb; b++) { let lo = 1, hi = -1; for (let j = b * step; j < (b + 1) * step; j++) { const v = d.mono[j]; if (v < lo) lo = v; if (v > hi) hi = v; } mn[b] = lo; mx[b] = hi; }
+    V = { file: f.rel, sr: d.sr, n: d.n, chans: d.chans, mono: d.mono, sha, fb, subtype: d.subtype, wave: { step, min: mn, max: mx }, spec: spectrogram(d.mono, d.sr), auto: null };
+    f.info = { sr: d.sr, n: d.n, ch: d.chans.length };
+  } catch (e) { S.view = null; showEmpty(`<b>${esc(f.rel)}</b> 파일을 열 수 없습니다: ${esc(e.message)}`); setSave("열기 실패", true); draw(); return; }
+  if (S.idx !== i) return;
+  S.view = V; S.undo = []; S.redo = []; S.histEdit = false; A.buffer = null;
+  const l = myLabels.get(f.rel);
+  S.hasLabel = !!l; S.region = l && l.start_sample != null ? [l.start_sample, l.end_sample] : null;
+  S.reviewed = !!(l && l.reviewed); S.memo = l ? l.memo : ""; $("memo").value = S.memo;
+  S.saved = stateJSON(); S.v0 = 0; S.v1 = V.n; S.cursor = 0;
+  buildSpecImage(); showEmpty(); resize(); refreshPanels();
+  setSave(l ? `마지막 저장 ${l.updated_at}` : "아직 저장된 라벨 없음");
+  $("files").querySelector("li.active")?.scrollIntoView({ block: "nearest" });
+  S.me.last_file = f.rel; putUser(S.me);
+  loadHistory();
+  setTimeout(async () => {  // detection after first paint
+    try { const a = await autoRegion(V.sha, V.mono, V.sr); if (S.view === V) { V.auto = a; refreshPanels(); draw(); } }
+    catch (e) { if (S.view === V) { V.auto = { start_sample: null }; $("auto-info").textContent = "자동 분석 실패: " + e.message; } }
+  }, 30);
+}
+function scheduleSave() { clearTimeout(S.saveTimer); if (!isDirty()) return; setSave("변경됨 · 자동 저장 대기…"); S.saveTimer = setTimeout(save, 700); }
+async function flushSave() { clearTimeout(S.saveTimer); if (S.saving) await S.saving; if (isDirty()) await save(); }
+async function save() {
+  if (!S.view || S.idx < 0) return;
+  clearTimeout(S.saveTimer);
+  if (S.region && S.region[1] - S.region[0] > maxLen()) { setSave("구간이 100 ms를 넘어 저장하지 않았습니다", true); return; }
+  const snap = stateJSON(), V = S.view, rel = S.files[S.idx].rel, reg = S.region;
+  S.saving = (async () => {
+    const r = await saveLabel(S.me.id, S.folder, rel, {
+      start_sample: reg ? reg[0] : null, end_sample: reg ? reg[1] : null, start_s: reg ? r6(reg[0] / V.sr) : null, end_s: reg ? r6(reg[1] / V.sr) : null,
+      reviewed: S.reviewed, memo: S.memo, sample_rate: V.sr, num_samples: V.n, sha256: V.sha,
+      file_duration_s: Math.round(V.n / V.sr * 1000) / 1000, auto: V.auto && V.auto.start_sample !== undefined ? { start_s: V.auto.start_s, end_s: V.auto.end_s } : null });
+    myLabels.set(rel, r.label);
+    if (S.view === V) { S.saved = snap; S.hasLabel = true; setSave(`저장됨 ${r.label.updated_at} (${S.me.id})`); refreshPanels(); if (r.actions.length) loadHistory(); }
+    renderFiles();
+  })().catch((e) => setSave("저장 실패: " + e.message, true)).finally(() => { S.saving = null; if (isDirty()) scheduleSave(); });
+  return S.saving;
+}
+window.addEventListener("beforeunload", (e) => { if (isDirty()) { save(); e.preventDefault(); e.returnValue = ""; } });
+document.addEventListener("visibilitychange", () => { if (document.hidden) flushSave(); });
+
+/* ============================== editing ============================== */
+const snapshot = () => JSON.stringify(S.region);
+function pushUndo() { S.undo.push(snapshot()); if (S.undo.length > 200) S.undo.shift(); S.redo = []; }
+function changed() { S.hasLabel = true; refreshPanels(); draw(); scheduleSave(); }
+const undo = () => { if (S.undo.length) { S.redo.push(snapshot()); S.region = JSON.parse(S.undo.pop()); changed(); } };
+const redo = () => { if (S.redo.length) { S.undo.push(snapshot()); S.region = JSON.parse(S.redo.pop()); changed(); } };
+function applyAuto() { const a = S.view.auto; if (!a) { toast("자동 분석 중입니다."); return; } pushUndo(); S.region = a.start_sample != null ? [a.start_sample, a.end_sample] : null; changed(); }
+function noBeep() { pushUndo(); S.region = null; changed(); }
+function shift(which, dMs) {
+  if (!S.region) return; pushUndo();
+  const d = Math.round(dMs * S.view.sr / 1000), r = [...S.region];
+  if (which === 0) r[0] = Math.max(0, r[1] - maxLen(), Math.min(r[1] - 1, r[0] + d)); else r[1] = Math.min(nS(), r[0] + maxLen(), Math.max(r[0] + 1, r[1] + d));
+  S.region = r; changed();
+}
+let drag = null;
+cv.addEventListener("contextmenu", (e) => e.preventDefault());
+cv.addEventListener("pointerdown", (ev) => {
+  if (!S.view || ev.button !== 0) return;
+  const r = cv.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top, rg = regionAt(y);
+  cv.setPointerCapture(ev.pointerId);
+  if (rg === "axis" || !rg) { S.cursor = clampS(sOf(x)); seekIfPlaying(); draw(); updateStatus(); return; }
+  const snap = snapshot();
+  if (S.region) {
+    const xa = xOf(S.region[0]), xb = xOf(S.region[1]), tol = ev.pointerType === "touch" ? 14 : 6;
+    if (Math.abs(x - xa) <= tol || Math.abs(x - xb) <= tol) { drag = { mode: "edge", x0: x, side: Math.abs(x - xa) <= Math.abs(x - xb) ? 0 : 1, snap, moved: false }; return; }
+    if (x > xa && x < xb) { drag = { mode: "move", x0: x, s0: sOf(x), r0: [...S.region], snap, moved: false }; return; }
+  }
+  drag = { mode: "create", x0: x, anchor: clampS(sOf(x)), snap, moved: false };
+});
+cv.addEventListener("pointermove", (ev) => {
+  if (!S.view) return;
+  const r = cv.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top;
+  S.hoverX = x >= 0 && x <= W && y >= 0 && y <= H ? x : -1;
+  if (drag) {
+    const s = clampS(sOf(Math.max(0, Math.min(W, x))));
+    if (Math.abs(x - drag.x0) > 3) drag.moved = true;
+    if (drag.mode === "edge" && drag.moved) { const rr = [...S.region]; if (drag.side === 0) rr[0] = Math.max(rr[1] - maxLen(), Math.min(s, rr[1] - 1)); else rr[1] = Math.min(rr[0] + maxLen(), Math.max(s, rr[0] + 1)); S.region = rr; }
+    else if (drag.mode === "move" && drag.moved) { const len = drag.r0[1] - drag.r0[0], st = Math.max(0, Math.min(nS() - len, drag.r0[0] + sOf(x) - drag.s0)); S.region = [st, st + len]; }
+    else if (drag.mode === "create" && drag.moved) { const a = drag.anchor, L = maxLen(); S.region = s >= a ? [a, Math.min(s, a + L)] : [Math.max(s, a - L), a]; if (S.region[1] <= S.region[0]) S.region[1] = S.region[0] + 1; }
+    refreshPanels();
+  } else {
+    const rg = regionAt(y); let cur = "crosshair";
+    if (S.region && rg && rg !== "axis") { const xa = xOf(S.region[0]), xb = xOf(S.region[1]); if (Math.abs(x - xa) <= 6 || Math.abs(x - xb) <= 6) cur = "ew-resize"; else if (x > xa && x < xb) cur = "grab"; }
+    cv.style.cursor = cur; updateStatus();
+  }
+  draw();
+});
+cv.addEventListener("pointerleave", () => { if (!drag) { S.hoverX = -1; draw(); updateStatus(); } });
+cv.addEventListener("pointerup", () => {
+  if (!drag) return;
+  if (!drag.moved && drag.mode !== "edge") { S.region = centered(sOf(drag.x0)); S.cursor = S.region[0]; }
+  if (snapshot() !== drag.snap) { S.undo.push(drag.snap); S.redo = []; changed(); }
+  drag = null; refreshPanels(); draw();
+});
+cv.addEventListener("wheel", (ev) => {
+  if (!S.view) return; ev.preventDefault();
+  const r = cv.getBoundingClientRect(), x = ev.clientX - r.left;
+  if (ev.shiftKey || Math.abs(ev.deltaX) > Math.abs(ev.deltaY)) { const d = (ev.shiftKey ? ev.deltaY : ev.deltaX) / W * (S.v1 - S.v0); setView(S.v0 + d, S.v1 + d); }
+  else zoom(Math.exp(ev.deltaY * 0.0015), sOf(x));
+}, { passive: false });
+function setView(a, b) { const n = nS(), span = Math.max(Math.min(n, S.view.sr * 0.3), Math.min(n, b - a)); a = Math.max(0, Math.min(n - span, a)); S.v0 = a; S.v1 = a + span; draw(); updateStatus(); }
+function zoom(f, c) { c = c ?? (S.v0 + S.v1) / 2; setView(c - (c - S.v0) * f, c + (S.v1 - c) * f); }
+
+/* ============================== playback (Web Audio, exact spans) ============================== */
+const A = { ctx: null, buffer: null, src: null, t0: 0, off: 0, playing: false,
+  pos() { return this.playing ? this.off + (this.ctx.currentTime - this.t0) : this.off; } };
+function audioBuffer() {
+  const V = S.view;
+  A.ctx = A.ctx || new (window.AudioContext || window.webkitAudioContext)();
+  if (!A.buffer) { A.buffer = A.ctx.createBuffer(V.chans.length, V.n, V.sr); V.chans.forEach((c, i) => A.buffer.copyToChannel(c, i)); }
+  return A.buffer;
+}
+function play(from, to = null) {
+  if (!S.view) return;
+  stop(false);
+  let buf; try { buf = audioBuffer(); } catch (e) { toast("이 브라우저에서 재생할 수 없는 샘플레이트입니다."); return; }
+  if (A.ctx.state === "suspended") A.ctx.resume();
+  const src = A.ctx.createBufferSource(); src.buffer = buf; src.connect(A.ctx.destination);
+  const off = from / S.view.sr;
+  if (to != null) src.start(0, off, Math.max(0, (to - from) / S.view.sr)); else src.start(0, off);
+  src.onended = () => { if (A.src === src) { A.playing = false; A.src = null; S.playEnd = null; tick(); } };
+  A.src = src; A.t0 = A.ctx.currentTime; A.off = off; A.playing = true; S.playEnd = to; tick();
+}
+function stop(redraw = true) { if (A.src) { A.src.onended = null; try { A.src.stop(); } catch (e) {} A.src = null; } A.playing = false; S.playEnd = null; if (redraw) tick(); }
+function playAll() { if (!S.view) return; if (A.playing && S.playEnd == null) { stop(); return; } play(S.cursor >= nS() - 100 ? 0 : S.cursor); }
+function playSeg() { if (!S.region) return; if (A.playing && S.playEnd != null) { stop(); return; } play(S.region[0], S.region[1]); }
+function seekIfPlaying() { if (A.playing && S.playEnd == null) play(S.cursor); }
+function tick() {
+  $("btn-play-all").classList.toggle("on", A.playing && S.playEnd == null); $("btn-play-seg").classList.toggle("on", A.playing && S.playEnd != null);
+  if (!A.playing || !S.view) { draw(); return; }
+  const s = A.pos() * S.view.sr; if (s > S.v1 || s < S.v0) { const sp = S.v1 - S.v0; setView(s - sp * 0.1, s + sp * 0.9); }
+  draw(); requestAnimationFrame(tick);
+}
+
+/* ============================== keys & buttons ============================== */
+function nextFile(d) { const vis = [...$("files").querySelectorAll("li")].map((li) => +li.dataset.idx), p = vis.indexOf(S.idx), t = p < 0 ? vis[0] : vis[p + d]; if (t !== undefined) openFile(t); }
+async function reviewNext() {
+  if (!S.hasLabel && !S.region && !(await ask("비프 없음으로 검수", "구간을 지정하지 않았습니다. '비프 없음'으로 검수 완료할까요?", "검수 완료"))) return;
+  S.hasLabel = true; S.reviewed = true; refreshPanels(); await save(); nextFile(1);
+}
+function toggleBig() { S.big = !S.big; $("wrap").classList.toggle("big", S.big); $("btn-big").textContent = S.big ? "스펙트로그램 작게 보기" : "스펙트로그램 크게 보기"; $("btn-big").classList.toggle("on", S.big); }
+window.addEventListener("keydown", async (ev) => {
+  if ($("app").hidden || document.querySelector("dialog[open]") || ev.target.matches("input, textarea, select") || !S.view) return;
+  const k = ev.code, c = ev.ctrlKey || ev.metaKey, st = ev.shiftKey ? 10 : 1;
+  if (c && k === "KeyS") { ev.preventDefault(); await save(); return; }
+  if (c && k === "KeyZ") { ev.preventDefault(); ev.shiftKey ? redo() : undo(); return; }
+  if (c && k === "KeyY") { ev.preventDefault(); redo(); return; }
+  if (c || ev.altKey) return;
+  const m = { Space: playAll, Enter: playSeg, Escape: () => stop(), Delete: noBeep, Backspace: noBeep, KeyA: applyAuto,
+    BracketLeft: () => shift(0, -st), BracketRight: () => shift(0, st), Semicolon: () => shift(1, -st), Quote: () => shift(1, st),
+    Equal: () => zoom(0.5), Minus: () => zoom(2), KeyF: () => setView(0, nS()), KeyB: toggleBig, KeyT: toggleTheme, KeyR: reviewNext,
+    KeyN: () => nextFile(1), ArrowDown: () => nextFile(1), KeyP: () => nextFile(-1), ArrowUp: () => nextFile(-1),
+    ArrowLeft: () => moveCursor(-1), ArrowRight: () => moveCursor(1) };
+  if (m[k]) { ev.preventDefault(); m[k](); } else if (ev.key === "?") $("dlg-help").showModal();
+});
+function moveCursor(d) { const j = Math.max(0, Math.min(nF() - 1, frameAt(S.cursor) + d)); S.cursor = S.view.fb.starts[j]; if (S.cursor < S.v0 || S.cursor > S.v1) { const sp = S.v1 - S.v0; setView(S.cursor - sp / 2, S.cursor + sp / 2); } updateStatus(); draw(); }
+const on = (id, fn) => ($(id).onclick = () => { if (S.view) fn(); });
+on("btn-play-all", playAll); on("btn-play-seg", playSeg); $("btn-stop").onclick = () => stop();
+on("btn-zin", () => zoom(0.5)); on("btn-zout", () => zoom(2)); on("btn-fit", () => setView(0, nS())); $("btn-big").onclick = toggleBig;
+on("btn-auto", applyAuto); on("btn-nobeep", noBeep); on("btn-save", save); on("btn-review", reviewNext);
+$("gain").onchange = (e) => { S.gain = +e.target.value; draw(); };
+$("memo").oninput = () => { if (!S.view) return; S.memo = $("memo").value; S.hasLabel = true; scheduleSave(); };
+$("btn-help").onclick = () => $("dlg-help").showModal();
+
+/* ============================== downloads ============================== */
+let DL = null;
+async function saveFile(filename, data) {
+  DL = DL || (await window.claude?.use?.("downloads").catch(() => null));
+  if (!DL) { toast("이 화면에서는 파일 저장을 쓸 수 없습니다."); return false; }
+  try { await DL.save({ filename, data }); toast(`${filename} 저장됨`); return true; }
+  catch (e) { if (e?.code !== "declined") toast("저장하지 못했습니다: " + (e?.message || e?.code || e)); return false; }
+}
+
+/* ============================== export ============================== */
+const LABEL_HEADERS = ["번호", "파일", "작업자 ID", "작업자 이름", "상태", "비프 여부", "비프 구간", "시작(초)", "끝(초)", "길이(ms)", "100ms 클립 구간(중심 기준)", "자동탐지 구간",
+  "자동 대비 시작 차이(ms)", "자동 대비 끝 차이(ms)", "메모", "수정 횟수", "최초 작업 일시", "최종 수정 일시", "샘플레이트(Hz)", "파일 길이(초)", "시작 샘플", "끝 샘플", "SHA-256"];
+const LABEL_KEYS = [null, "file", "user_id", "display_name", "status", null, "region", "start_s", "end_s", "duration_ms", "clip_region", "auto_region",
+  "auto_diff_start_ms", "auto_diff_end_ms", "memo", "n_edits", "created_at", "updated_at", "sample_rate", "file_duration_s", "start_sample", "end_sample", "sha256"];
+const AUDIT_HEADERS = ["번호", "일시", "작업자 ID", "작업자 이름", "파일", "동작", "변경 전", "변경 후", "비고"], SOURCE = "출처 파일";
+const ACTION_FILL = { "구간 지정": "DDEBF7", "구간 수정": "FFF2CC", "구간 삭제(비프 없음)": "FCE4D6", "비프 없음 지정": "FCE4D6", "검수 완료": "E2EFDA", "검수 취소": "F8CBAD",
+  "메모 작성": "EDE7F6", "메모 수정": "EDE7F6", "로그인": "F2F2F2", "로그아웃": "F2F2F2", "저장 후 로그아웃": "F2F2F2", "아이디 생성": "F2F2F2", "데이터 폴더 변경": "FFE699", "내보내기": "F2F2F2" };
+const STATUS_FILL = { "검수 완료": "E2EFDA", "작업 중": "FFF2CC", "일치": "E2EFDA", "불일치": "FCE4D6" };
+const RULE_ROWS = [
+  ["라벨 규칙", "샘플(파일)마다 비프 구간은 최대 1개이며 길이는 0~100 ms 입니다. 구간은 오디오를 자르지 않고 표시만 합니다. '비프 없음'은 해당 샘플에 비프가 없다고 작업자가 판단한 것입니다."],
+  ["100ms 클립 구간", "표시한 구간의 중심을 기준으로 양옆 50 ms씩 잡은 100 ms 창입니다 (파일 끝에서는 안쪽으로 밀어서 100 ms 유지). 나중에 100 ms 샘플을 자를 때 사용합니다."],
+  ["작업자 간 일치", "두 작업자 이상이 라벨링한 파일에서 시작·끝 경계 차이가 모두 20 ms 이하면 '일치'."],
+  ["자동탐지", "협대역 톤 검출기가 찾은 첫 비프의 시작점부터 최대 100 ms. 사람이 검수한 결과가 정답입니다."],
+  ["로그인 방식", "아이디만으로 로그인합니다. 작업자 ID는 본인 확인을 거친 값이 아닙니다."]];
+const SHEET_HELP = ["시트 설명", "라벨 결과: 작업자별 최종 구간 / 작업 이력: 누가 언제 무엇을 어떻게 바꿨는지 / 작업자 요약: 작업자별 진행 현황 / 파일 현황: 파일별 작업자 간 일치 여부"];
+
+function clipWindow(s, e, n, sr) { if (s == null) return [null, null]; const L = Math.min(maxLenOf(sr), n), c = Math.floor((s + e) / 2); const a = Math.max(0, Math.min(n - L, c - Math.floor(L / 2))); return [a, a + L]; }
+async function collect(reviewedOnly) {
+  const uid = S.me.id, folder = S.folder || S.me.folder_name;
+  let labels = (await Store.byUser("labels", uid)).filter((l) => l.dataset === folder);
+  if (S.folder) { const have = new Set(S.files.map((f) => f.rel)); labels = labels.filter((l) => have.has(l.file)); }
+  if (reviewedOnly) labels = labels.filter((l) => l.reviewed);
+  labels.sort((a, b) => (a.file < b.file ? -1 : 1));
+  const out = [];
+  for (const l0 of labels) {
+    const l = { ...l0, display_name: S.me.display_name, status: l0.reviewed ? "검수 완료" : "작업 중", has_beep: l0.start_sample != null };
+    const sr = l.sample_rate, n = l.num_samples;
+    l.duration_ms = l.has_beep ? Math.round(10000 * (l.end_sample - l.start_sample) / sr) / 10 : null;
+    l.region = regionText(l.start_s, l.end_s);
+    const [cs, ce] = clipWindow(l.start_sample, l.end_sample, n, sr);
+    l.clip_start_s = cs == null ? null : r6(cs / sr); l.clip_end_s = ce == null ? null : r6(ce / sr);
+    l.clip_region = l.has_beep ? regionText(l.clip_start_s, l.clip_end_s) : "";
+    const au = l.sha256 ? await Store.get("auto", l.sha256 + "|" + CFG_DIGEST) : null;
+    l.auto = au; l.auto_region = au ? regionText(au.start_s, au.end_s) : "";
+    l.auto_diff_start_ms = au && au.start_s != null && l.has_beep ? Math.round(10000 * (l.start_s - au.start_s)) / 10 : null;
+    l.auto_diff_end_ms = au && au.start_s != null && l.has_beep ? Math.round(10000 * (l.end_s - au.end_s)) / 10 : null;
+    l.file_duration_s = sr ? Math.round(n / sr * 1000) / 1000 : null;
+    out.push(l);
+  }
+  const audit = (await myAudit(uid)).filter((a) => a.dataset === folder || a.dataset == null).map((a) => ({ ...a, display_name: S.me.display_name }));
+  const files = S.folder ? S.files.map((f) => [f.rel, f.info && !f.info.error ? Math.round(f.info.n / f.info.sr * 1000) / 1000 : null]) : out.map((l) => [l.file, l.file_duration_s]);
+  const autoBy = {}; for (const l of out) if (l.auto_region) autoBy[l.file] = l.auto_region;
+  return { folder, labels: out, audit, users: { [uid]: { display_name: S.me.display_name, created_at: S.me.created_at, last_login: S.me.last_login } }, files, autoBy };
+}
+function agreement(ls) {
+  const b = ls.filter((l) => l.has_beep), mm = (k) => b.length >= 2 ? Math.round(10000 * (Math.max(...b.map((l) => l[k])) - Math.min(...b.map((l) => l[k])))) / 10 : null;
+  const ds = mm("start_s"), de = mm("end_s");
+  if (ls.length < 2) return ["—", ds, de];
+  if (b.length && b.length < ls.length) return ["불일치", ds, de];
+  if (!b.length) return ["일치", ds, de];
+  return [Math.max(ds, de) <= AGREE_TOL_MS ? "일치" : "불일치", ds, de];
+}
+const WIDE = [[0x1100, 0x115f], [0x2e80, 0xa4cf], [0xac00, 0xd7a3], [0xf900, 0xfaff], [0xfe30, 0xfe4f], [0xff00, 0xff60], [0xffe0, 0xffe6]];
+const cw = (v) => [...String(v ?? "")].reduce((s, ch) => { const c = ch.codePointAt(0); return s + (WIDE.some(([a, b]) => c >= a && c <= b) ? 2 : 1); }, 0);
+function table(ws, headers, rows, { widths = {}, wrap = [], fill = null, fmt = {} } = {}) {
+  const thin = { style: "thin", color: { argb: "FFBFBFBF" } }, border = { top: thin, left: thin, bottom: thin, right: thin };
+  const hr = ws.addRow(headers); hr.height = 30;
+  hr.eachCell((c) => { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F3864" } }; c.font = { bold: true, color: { argb: "FFFFFFFF" } }; c.border = border; c.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; });
+  rows.forEach((r, i) => {
+    const row = ws.addRow(r.map((v) => (v == null ? null : v))), f = fill ? fill(r) : null;
+    for (let j = 1; j <= headers.length; j++) {
+      const c = row.getCell(j); c.border = border; c.alignment = { vertical: "top", wrapText: wrap.includes(j) };
+      if (fmt[headers[j - 1]] && typeof r[j - 1] === "number") c.numFmt = fmt[headers[j - 1]];
+      const color = f || (i % 2 === 1 ? "F7F9FC" : null); if (color) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + color } };
+    }
+  });
+  headers.forEach((h, j) => { let w = Math.max(cw(h), ...rows.slice(0, 2000).map((r) => cw(r[j]))) + 2; if (widths[h]) w = widths[h]; ws.getColumn(j + 1).width = Math.min(Math.max(w, 8), 60); });
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(rows.length, 1) + 1, column: headers.length } };
+  ws.views = [{ state: "frozen", xSplit: 1, ySplit: 1 }];
+}
+async function writeWorkbook(d, title, info, withSource) {
+  if (!window.ExcelJS) throw new Error("엑셀 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침하세요.");
+  const wb = new ExcelJS.Workbook(), src = withSource ? [SOURCE] : [];
+  let ws = wb.addWorksheet("라벨 결과");
+  table(ws, [...LABEL_HEADERS, ...src], d.labels.map((l, n) => [...LABEL_HEADERS.map((h, j) => h === "번호" ? n + 1 : h === "비프 여부" ? (l.has_beep ? "있음" : "없음") : l[LABEL_KEYS[j]] ?? null), ...(withSource ? [l.source || ""] : [])]),
+    { widths: { "메모": 40, "SHA-256": 20 }, wrap: [15], fmt: { "시작(초)": "0.000", "끝(초)": "0.000" }, fill: (r) => STATUS_FILL[r[4]] });
+  ws = wb.addWorksheet("작업 이력");
+  table(ws, [...AUDIT_HEADERS, ...src], d.audit.map((a, n) => [n + 1, a.ts, a.user_id || "", a.display_name || a.user_id || "", a.file || "", a.action, a.before || "", a.after || "", a.detail || "", ...(withSource ? [a.source || ""] : [])]),
+    { widths: { "변경 전": 30, "변경 후": 30, "비고": 30 }, wrap: [7, 8, 9], fill: (r) => ACTION_FILL[r[5]] });
+  ws = wb.addWorksheet("작업자 요약");
+  const nFiles = d.files.length, sum = [];
+  for (const [uid, u] of Object.entries(d.users)) {
+    const ls = d.labels.filter((l) => l.user_id === uid), durs = ls.map((l) => l.duration_ms).filter((v) => v != null), done = ls.filter((l) => l.reviewed).length;
+    sum.push([uid, u.display_name || uid, u.created_at || "", u.last_login || "", ls.length, done, ls.length - done, ls.filter((l) => l.has_beep).length, ls.filter((l) => !l.has_beep).length,
+      durs.length ? Math.round(10 * durs.reduce((a, b) => a + b) / durs.length) / 10 : null, d.audit.filter((a) => a.user_id === uid).length, nFiles ? `${done}/${nFiles} (${(100 * done / nFiles).toFixed(1)}%)` : "-"]);
+  }
+  table(ws, ["작업자 ID", "작업자 이름", "생성 일시", "마지막 로그인", "작업한 파일 수", "검수 완료", "작업 중", "비프 있음", "비프 없음", "평균 구간 길이(ms)", "작업 이력 수", "진행률(검수/전체 파일)"], sum);
+  ws = wb.addWorksheet("파일 현황");
+  const byFile = new Map(); for (const l of d.labels) { if (!byFile.has(l.file)) byFile.set(l.file, []); byFile.get(l.file).push(l); }
+  table(ws, ["파일", "파일 길이(초)", "작업자 수", "검수 완료 작업자", "작업자별 구간", "작업자 간 일치(±20ms)", "시작 최대 차이(ms)", "끝 최대 차이(ms)", "자동탐지 구간", "메모 모음"],
+    d.files.map(([f, dur]) => { const ls = byFile.get(f) || [], [v, ds, de] = agreement(ls); return [f, dur, ls.length, ls.filter((l) => l.reviewed).map((l) => l.user_id).join(", "), ls.map((l) => `${l.user_id}: ${l.region}`).join("\n"), v, ds, de, d.autoBy[f] || "", ls.filter((l) => l.memo).map((l) => `${l.user_id}: ${l.memo}`).join("\n")]; }),
+    { widths: { "작업자별 구간": 38, "메모 모음": 40 }, wrap: [5, 10], fill: (r) => STATUS_FILL[r[5]] });
+  ws = wb.addWorksheet("정보");
+  ws.getCell("A1").value = title; ws.getCell("A1").font = { bold: true, size: 14 };
+  info.forEach(([k, v], i) => { ws.getCell(i + 3, 1).value = k; ws.getCell(i + 3, 1).font = { bold: true }; const c = ws.getCell(i + 3, 2); c.value = v; c.alignment = { wrapText: true, vertical: "top" }; });
+  ws.getColumn(1).width = 22; ws.getColumn(2).width = 100;
+  return new Blob([await wb.xlsx.writeBuffer()]);
+}
+const csvSafe = (v) => (v == null ? "" : typeof v === "string" && /^[=+\-@\t\r]/.test(v) ? "'" + v : v);
+const csvCell = (v) => { v = String(csvSafe(v)); return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; };
+const toCsv = (head, rows) => "﻿" + [head, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
+
+async function doExport(kind) {
+  $("exp-error").textContent = "";
+  await flushSave();
+  const d = await collect($("exp-reviewed").checked), base = `${S.me.id}_${stamp()}`;
+  if (!d.labels.length && kind !== "audit") { $("exp-error").textContent = "내보낼 라벨이 없습니다. 먼저 구간을 지정하세요."; return; }
+  let ok = false;
+  try {
+    if (kind === "xlsx") {
+      const info = [["생성 일시", now()], ["내보낸 사람", S.me.id], ["데이터 폴더", d.folder || ""], ["툴 버전", VERSION], ...RULE_ROWS, ["탐지 설정 해시", CFG_DIGEST],
+        ["전체 파일 수", d.files.length], ["라벨 수(작업자×파일)", d.labels.length], ["작업자 수", 1], ["작업 이력 수", d.audit.length], SHEET_HELP];
+      ok = await saveFile(`beep_labels_${base}.xlsx`, await writeWorkbook(d, "Beep Labeler 내보내기 정보", info, false));
+    } else if (kind === "labels") {
+      ok = await saveFile(`beep_labels_${base}.csv`, toCsv(["file", "user_id", "user_name", "status", "has_beep", "start_s", "end_s", "duration_ms", "start_sample", "end_sample", "clip100_start_s", "clip100_end_s", "memo", "auto_start_s", "auto_end_s", "n_edits", "created_at", "updated_at", "sample_rate", "file_duration_s", "sha256"],
+        d.labels.map((l) => [l.file, l.user_id, l.display_name, l.status, l.has_beep ? 1 : 0, l.start_s, l.end_s, l.duration_ms, l.start_sample, l.end_sample, l.clip_start_s, l.clip_end_s, l.memo, l.auto?.start_s, l.auto?.end_s, l.n_edits, l.created_at, l.updated_at, l.sample_rate, l.file_duration_s, l.sha256])));
+    } else if (kind === "frames") {
+      const rows = [];
+      for (const l of d.labels) { const fb = frameBounds(l.num_samples, l.sample_rate); fb.starts.forEach((s, i) => { const e = fb.ends[i], ov = l.has_beep ? Math.max(0, Math.min(e, l.end_sample) - Math.max(s, l.start_sample)) : 0; rows.push([l.file, l.user_id, l.status, i, r6(s / l.sample_rate), r6(e / l.sample_rate), Math.round(10000 * ov / l.sample_rate) / 10, ov > 0 ? 1 : 0, l.memo]); }); }
+      ok = await saveFile(`beep_frames_${base}.csv`, toCsv(["file", "user_id", "status", "frame_index", "start_s", "end_s", "overlap_ms", "label", "memo"], rows));
+    } else {
+      ok = await saveFile(`beep_audit_${base}.csv`, toCsv(["id", "timestamp", "user_id", "file", "action", "before", "after", "detail"], d.audit.map((a) => [a.id, a.ts, a.user_id, a.file, a.action, a.before, a.after, a.detail])));
+    }
+  } catch (e) { $("exp-error").textContent = "내보내기 실패: " + e.message; return; }
+  if (ok) await log(S.me.id, "내보내기", { detail: `${kind} (검수 완료만: ${$("exp-reviewed").checked ? "예" : "아니오"})` });
+}
+$("btn-export").onclick = () => { $("exp-error").textContent = ""; $("dlg-export").showModal(); };
+$("exp-xlsx").onclick = () => doExport("xlsx"); $("exp-labels").onclick = () => doExport("labels");
+$("exp-frames").onclick = () => doExport("frames"); $("exp-audit").onclick = () => doExport("audit");
+
+/* ============================== merge ============================== */
+function cellText(v) {
+  if (v == null) return ""; if (v instanceof Date) return `${v.getFullYear()}-${pad2(v.getMonth() + 1)}-${pad2(v.getDate())} ${pad2(v.getHours())}:${pad2(v.getMinutes())}:${pad2(v.getSeconds())}`;
+  if (typeof v === "object") { if (v.richText) return v.richText.map((t) => t.text).join(""); if ("result" in v) return cellText(v.result); if ("text" in v) return String(v.text); if (v.formula) return "=" + v.formula; }
+  return String(v);
+}
+function cellNum(v) { if (v == null || v === "") return null; if (typeof v === "object" && "result" in v) v = v.result; const x = Number(v); return Number.isFinite(x) ? x : null; }
+function sheetRows(ws) {
+  const head = [], out = [];
+  ws.getRow(1).eachCell({ includeEmpty: true }, (c, j) => (head[j] = cellText(c.value)));
+  ws.eachRow((row, i) => { if (i === 1) return; const o = {}; let any = false; head.forEach((h, j) => { if (!h) return; const v = row.getCell(j).value; if (v != null && v !== "") any = true; o[h] = v; }); if (any) out.push(o); });
+  return [head.filter(Boolean), out];
+}
+const NUMERIC = new Set(["start_s", "end_s", "duration_ms", "auto_diff_start_ms", "auto_diff_end_ms", "n_edits", "sample_rate", "file_duration_s", "start_sample", "end_sample"]);
+async function readExport(file) {
+  const wb = new ExcelJS.Workbook();
+  try { await wb.xlsx.load(await file.arrayBuffer()); } catch (e) { throw new Error(`${file.name}: 엑셀 파일을 열 수 없습니다`); }
+  const L = wb.getWorksheet("라벨 결과"), Au = wb.getWorksheet("작업 이력");
+  if (!L || !Au) throw new Error(`${file.name}: Beep Labeler에서 내보낸 엑셀이 아닙니다 ('라벨 결과'/'작업 이력' 시트 없음)`);
+  const [head, rows] = sheetRows(L);
+  for (const need of ["파일", "작업자 ID", "상태", "비프 여부", "시작(초)", "끝(초)"]) if (!head.includes(need)) throw new Error(`${file.name}: '라벨 결과' 시트에 '${need}' 열이 없습니다`);
+  const labels = [];
+  for (const r of rows) {
+    const l = {};
+    LABEL_HEADERS.forEach((h, j) => { const k = LABEL_KEYS[j]; if (k) l[k] = NUMERIC.has(k) ? cellNum(r[h]) : cellText(r[h]); });
+    if (!l.file || !l.user_id) continue;
+    l.display_name = l.display_name || l.user_id; l.reviewed = l.status === "검수 완료"; l.has_beep = cellText(r["비프 여부"]) === "있음";
+    if (l.has_beep && (l.start_s == null || l.end_s == null)) throw new Error(`${file.name}: ${l.file} / ${l.user_id} 의 시작·끝 초가 비어 있습니다`);
+    l.source = cellText(r[SOURCE]) || file.name; labels.push(l);
+  }
+  const [, arows] = sheetRows(Au);
+  const audit = arows.map((r) => ({ ts: cellText(r["일시"]), user_id: cellText(r["작업자 ID"]), display_name: cellText(r["작업자 이름"]), file: cellText(r["파일"]), action: cellText(r["동작"]), before: cellText(r["변경 전"]), after: cellText(r["변경 후"]), detail: cellText(r["비고"]), source: cellText(r[SOURCE]) || file.name }));
+  const info = {}; const I = wb.getWorksheet("정보"); if (I) I.eachRow((row) => { const k = cellText(row.getCell(1).value); if (k) info[k] = cellText(row.getCell(2).value); });
+  return { name: file.name, labels, audit, info };
+}
+async function mergeExports(exps) {
+  const rep = { sources: [], duplicates: 0, conflicts: [], sha: [] }, best = new Map();
+  for (const ex of exps) {
+    rep.sources.push(`${ex.name}: 라벨 ${ex.labels.length}개, 이력 ${ex.audit.length}개 (내보낸 사람 ${ex.info["내보낸 사람"] || "-"}, ${ex.info["생성 일시"] || "-"})`);
+    for (const l of ex.labels) {
+      const k = l.file + "\u0001" + l.user_id, o = best.get(k);
+      if (!o) { best.set(k, l); continue; }
+      rep.duplicates++;
+      const same = o.has_beep === l.has_beep && o.start_s === l.start_s && o.end_s === l.end_s && o.memo === l.memo && o.reviewed === l.reviewed, newer = l.updated_at > o.updated_at;
+      if (!same) { const [kp, dp] = newer ? [l, o] : [o, l]; rep.conflicts.push(`${l.file} / ${l.user_id}: '${kp.source}'(${kp.updated_at}, ${kp.region}) 사용, '${dp.source}'(${dp.updated_at}, ${dp.region}) 제외`); }
+      if (newer) best.set(k, l);
+    }
+  }
+  const labels = [...best.values()].sort((a, b) => (a.file + a.user_id < b.file + b.user_id ? -1 : 1));
+  const shas = new Map(); for (const l of labels) if (l.sha256) { if (!shas.has(l.file)) shas.set(l.file, new Set()); shas.get(l.file).add(l.sha256); }
+  rep.sha = [...shas].filter(([, s]) => s.size > 1).map(([f]) => f).sort();
+  const seen = new Set(), audit = [];
+  for (const ex of exps) for (const a of ex.audit) { const k = [a.ts, a.user_id, a.file, a.action, a.before, a.after, a.detail].join("\u0001"); if (!seen.has(k)) { seen.add(k); audit.push(a); } }
+  audit.sort((a, b) => (a.ts === b.ts ? (a.user_id < b.user_id ? -1 : 1) : a.ts < b.ts ? -1 : 1));
+  const users = {};
+  for (const l of labels) users[l.user_id] ||= { display_name: l.display_name, created_at: "", last_login: "" };
+  for (const a of audit) { if (!a.user_id) continue; const u = (users[a.user_id] ||= { display_name: a.display_name || a.user_id, created_at: "", last_login: "" }); if (a.action === "아이디 생성" && (!u.created_at || a.ts < u.created_at)) u.created_at = a.ts; if (a.action === "로그인" && a.ts > u.last_login) u.last_login = a.ts; }
+  const sortedUsers = Object.fromEntries(Object.entries(users).sort());
+  const files = new Map(), autoBy = {}; for (const l of labels) { if (!files.has(l.file)) files.set(l.file, l.file_duration_s); if (l.auto_region && !autoBy[l.file]) autoBy[l.file] = l.auto_region; }
+  const fileList = [...files].sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  const info = [["합친 일시", now()], ["툴 버전", VERSION], ["합친 파일", rep.sources.join("\n")], ["중복 라벨", `${rep.duplicates}개 (같은 파일·같은 작업자 → 최종 수정 일시가 가장 늦은 것 사용)`],
+    ["내용이 다른 중복", rep.conflicts.join("\n") || "없음"], ["오디오 불일치 경고", rep.sha.length ? "같은 파일 이름인데 PC마다 오디오 내용(SHA-256)이 다름: " + rep.sha.join(", ") : "없음"],
+    ...RULE_ROWS, ["파일 수", fileList.length], ["라벨 수(작업자×파일)", labels.length], ["작업자 수", Object.keys(sortedUsers).length], ["작업 이력 수", audit.length], SHEET_HELP];
+  const blob = await writeWorkbook({ labels, audit, users: sortedUsers, files: fileList, autoBy }, "Beep Labeler 합친 결과", info, true);
+  return { blob, rep, n: { labels: labels.length, audit: audit.length, users: Object.keys(sortedUsers), files: fileList.length } };
+}
+$("merge-files").onchange = () => { const n = $("merge-files").files.length; $("merge-run").disabled = !n; $("merge-result").textContent = n ? `${n}개 선택됨: ${[...$("merge-files").files].map((f) => f.name).join(", ")}` : ""; };
+$("merge-run").onclick = async () => {
+  const files = [...$("merge-files").files]; if (!files.length) return;
+  $("merge-run").disabled = true; $("merge-result").textContent = "합치는 중…";
+  try {
+    if (!window.ExcelJS) throw new Error("엑셀 라이브러리를 불러오지 못했습니다. 새로고침하세요.");
+    const exps = []; for (const f of files) exps.push(await readExport(f));
+    const r = await mergeExports(exps), name = `beep_labels_merged_${stamp()}.xlsx`;
+    let msg = `라벨 ${r.n.labels}개 · 작업 이력 ${r.n.audit}개 · 작업자 ${r.n.users.join(", ")} · 파일 ${r.n.files}개`;
+    if (r.rep.duplicates) msg += `\n중복 ${r.rep.duplicates}개는 가장 최근 수정본을 사용했습니다.`;
+    if (r.rep.conflicts.length) msg += "\n\n[내용이 다른 중복]\n" + r.rep.conflicts.join("\n");
+    if (r.rep.sha.length) msg += "\n\n[경고] 사람마다 오디오 내용이 다른 파일:\n" + r.rep.sha.join("\n");
+    $("merge-result").textContent = msg;
+    if (await saveFile(name, r.blob)) await log(S.me.id, "엑셀 합치기", { detail: `${name} ← ${files.map((f) => f.name).join(", ")}` });
+  } catch (e) { $("merge-result").textContent = "합치기 실패: " + e.message; }
+  $("merge-run").disabled = false;
+};
+
+/* ============================== backup ============================== */
+$("btn-backup").onclick = () => { $("backup-result").textContent = ""; $("dlg-backup").showModal(); };
+$("bk-save").onclick = async () => {
+  await flushSave();
+  const data = { app: "beeplabel-web", version: VERSION, exported_at: now(), user: S.me, labels: await Store.byUser("labels", S.me.id), audit: await myAudit(S.me.id) };
+  if (await saveFile(`beeplabel_backup_${S.me.id}_${stamp()}.json`, JSON.stringify(data))) $("backup-result").textContent = `라벨 ${data.labels.length}개, 이력 ${data.audit.length}개를 백업했습니다.`;
+};
+$("bk-file").onchange = async () => {
+  const f = $("bk-file").files[0]; $("bk-file").value = ""; if (!f) return;
+  try {
+    const d = JSON.parse(await f.text());
+    if (d.app !== "beeplabel-web" || !d.user) throw new Error("Beep Labeler 백업 파일이 아닙니다");
+    if (d.user.id !== S.me.id && !(await ask("다른 아이디의 백업", `이 백업은 '${d.user.id}' 아이디의 기록입니다. 지금 아이디(${S.me.id})로 가져올까요?`, "가져오기"))) return;
+    let nl = 0, na = 0;
+    for (const l of d.labels || []) { const key = lkey(S.me.id, l.dataset, l.file), o = await Store.get("labels", key); if (!o || (l.updated_at || "") > (o.updated_at || "")) { await Store.put("labels", { ...l, key, user_id: S.me.id }); nl++; } }
+    const have = new Set((await myAudit(S.me.id)).map((a) => [a.ts, a.action, a.file, a.before, a.after].join("\u0001")));
+    for (const a of d.audit || []) { const k = [a.ts, a.action, a.file, a.before, a.after].join("\u0001"); if (!have.has(k)) { const { id, ...rest } = a; await Store.put("audit", { ...rest, user_id: S.me.id }); na++; } }
+    $("backup-result").textContent = `복원 완료: 라벨 ${nl}개, 이력 ${na}개를 가져왔습니다.`;
+    if (S.folder) { myLabels.clear(); for (const l of await Store.byUser("labels", S.me.id)) if (l.dataset === S.folder) myLabels.set(l.file, l); renderFiles(); if (S.idx >= 0) openFile(S.idx); }
+  } catch (e) { $("backup-result").textContent = "복원 실패: " + e.message; }
+};
+
+/* ============================== boot ============================== */
+(async () => {
+  await Store.init();
+  let sid = null; try { sid = localStorage.getItem("bl-session"); } catch (e) {}
+  const u = sid ? await getUser(sid) : null;
+  if (u) startApp(u); else showLogin();
+})();
+</script>
