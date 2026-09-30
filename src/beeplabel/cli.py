@@ -11,14 +11,18 @@ from pathlib import Path
 
 from . import __version__, regions
 from .metrics import FrameStats, fmt
-from .project import DEFAULT_DATA_DIR, App
+from .project import DEFAULT_DATA_DIR, App, Dataset
 
 
-def _app(a) -> App:
-    app = App(a.data_dir)
-    if getattr(a, "dataset", None):
-        app.set_dataset(a.dataset)
-    return app
+def _dataset(a, app: App) -> Dataset:
+    """--dataset, else the --user's own folder, else the default folder."""
+    path = getattr(a, "dataset", None) or (app.path_for(a.user) if getattr(a, "user", None) else app.default_path)
+    if not path:
+        sys.exit("WAV 폴더가 지정되지 않았습니다 (--dataset 경로 지정).")
+    try:
+        return app.open(path)
+    except (FileNotFoundError, OSError) as e:
+        sys.exit(str(e))
 
 
 def cmd_serve(a):
@@ -26,11 +30,13 @@ def cmd_serve(a):
 
     from .server import create_app
 
-    app = _app(a)
+    app = App(a.data_dir)
+    if a.dataset:
+        app.set_default(a.dataset)
     url = f"http://{'127.0.0.1' if a.host in ('0.0.0.0', '::') else a.host}:{a.port}/"
     print(f"Beep Labeler {__version__}")
     print(f"  데이터 저장 위치 : {app.data_dir}")
-    print(f"  WAV 폴더        : {app.dataset_key or '(미지정 - 웹 화면 설정에서 지정)'}  파일 {len(app.files)}개")
+    print(f"  기본 WAV 폴더   : {app.default_path or '(없음 - 로그인 후 설정에서 아이디별로 지정)'}")
     print(f"  접속 주소       : {url}")
     if a.host in ("0.0.0.0", "::"):
         print("  같은 네트워크의 다른 PC에서는 http://<이 PC의 IP>:%d/ 로 접속하세요." % a.port)
@@ -42,23 +48,32 @@ def cmd_serve(a):
 
 def cmd_set_dataset(a):
     app = App(a.data_dir)
-    app.set_dataset(a.path)
-    app.db.log(None, "데이터 폴더 변경", after=app.dataset_key, detail="CLI")
-    print(f"WAV 폴더를 {app.dataset_key} 로 지정했습니다 ({len(app.files)}개 파일).")
+    try:
+        if a.user:
+            if not app.db.get_user(a.user):
+                sys.exit(f"없는 아이디: {a.user}")
+            ds = app.set_user_dataset(a.user, a.path)
+            app.db.log(a.user, "데이터 폴더 변경", after=ds.dataset_key, detail="CLI")
+            print(f"{a.user} 의 WAV 폴더를 {ds.dataset_key} 로 지정했습니다 ({len(ds.files)}개 파일).")
+        else:
+            ds = app.set_default(a.path)
+            print(f"기본 WAV 폴더를 {ds.dataset_key} 로 지정했습니다 ({len(ds.files)}개 파일). "
+                  "폴더를 따로 지정하지 않은 아이디에 적용됩니다.")
+    except (FileNotFoundError, OSError) as e:
+        sys.exit(str(e))
 
 
 def cmd_export(a):
     from . import export as ex
 
-    app = _app(a)
-    if not app.dataset:
-        sys.exit("WAV 폴더가 지정되지 않았습니다 (--dataset 또는 set-dataset).")
-    out = Path(a.out or f"beep_export_{datetime.now():%Y%m%d_%H%M}")
+    app = App(a.data_dir)
+    ds = _dataset(a, app)
+    out = Path(a.out or f"beep_export_{a.user or 'all'}_{datetime.now():%Y%m%d_%H%M}")
     out.mkdir(parents=True, exist_ok=True)
-    data = ex.collect(app, reviewed_only=a.reviewed_only)
-    (out / "beep_labels.xlsx").write_bytes(ex.excel(app, data, "CLI"))
+    data = ex.collect(ds, user_id=a.user, reviewed_only=a.reviewed_only)
+    (out / "beep_labels.xlsx").write_bytes(ex.excel(ds, data, a.user or "CLI"))
     (out / "labels.csv").write_bytes(ex.labels_csv(data))
-    (out / "frames.csv").write_bytes(ex.frames_csv(app, data))
+    (out / "frames.csv").write_bytes(ex.frames_csv(ds, data))
     (out / "audit.csv").write_bytes(ex.audit_csv(data))
     print(f"{len(data['labels'])}개 라벨, {len(data['audit'])}개 작업 이력 -> {out.resolve()}")
 
@@ -71,10 +86,11 @@ def cmd_users(a):
 
 
 def cmd_agree(a):
-    """Agreement between two annotators (or an annotator and 'auto') over shared files."""
+    """Agreement between two ids in this PC's DB, or an id and 'auto' (the detector).
+    For people on different PCs, merge their Excel files instead."""
     from .export import AGREE_TOL_MS
 
-    app = _app(a)
+    app = _dataset(a, App(a.data_dir))
     ua, ub = a.users
 
     def region_of(user, f):
@@ -159,18 +175,20 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     sp = sub.add_parser("serve", help="웹 화면 실행")
-    sp.add_argument("--dataset", "-d", help="WAV 폴더 (지정하면 저장되어 다음 실행에도 사용)")
+    sp.add_argument("--dataset", "-d", help="기본 WAV 폴더 (폴더를 지정하지 않은 아이디에 적용, 저장됨)")
     sp.add_argument("--host", default="127.0.0.1", help="다른 PC에서도 접속하려면 0.0.0.0")
     sp.add_argument("--port", type=int, default=8765)
     sp.add_argument("--no-browser", action="store_true")
     sp.set_defaults(func=cmd_serve)
 
-    sp = sub.add_parser("set-dataset", help="WAV 폴더 경로를 미리 지정")
+    sp = sub.add_parser("set-dataset", help="WAV 폴더 경로를 미리 지정 (--user 로 아이디별)")
     sp.add_argument("path")
+    sp.add_argument("--user", "-u", help="이 아이디의 폴더로 지정 (없으면 기본 폴더)")
     sp.set_defaults(func=cmd_set_dataset)
 
     sp = sub.add_parser("export", help="엑셀 + CSV 내보내기")
     sp.add_argument("--dataset", "-d")
+    sp.add_argument("--user", "-u", help="이 아이디의 작업만 (없으면 이 PC의 모든 아이디)")
     sp.add_argument("--out", "-o")
     sp.add_argument("--reviewed-only", action="store_true")
     sp.set_defaults(func=cmd_export)
@@ -181,6 +199,7 @@ def main(argv=None):
     sp = sub.add_parser("agree", help="작업자 간 (또는 작업자-자동탐지) 일치도")
     sp.add_argument("--dataset", "-d")
     sp.add_argument("--users", nargs=2, required=True, metavar=("A", "B"), help="'auto' 사용 가능")
+    sp.add_argument("--user", "-u", help=argparse.SUPPRESS)
     sp.add_argument("--reviewed-only", action="store_true")
     sp.set_defaults(func=cmd_agree)
 

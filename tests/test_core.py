@@ -80,7 +80,7 @@ def env(tmp_path):
 def test_full_flow(env, tmp_path):
     ds, app, c = env
     assert c.get("/api/me").status_code == 401
-    assert c.get("/api/public").json()["users"] == []
+    assert "users" not in c.get("/api/public").json()   # other ids are never listed
 
     # id-only login: unknown id -> 404 until the user confirms creating it
     assert c.post("/api/auth/login", json={"user_id": "hong"}).status_code == 404
@@ -107,61 +107,72 @@ def test_full_flow(env, tmp_path):
     c.put("/api/files/1/label", json={"file": "a/s1.wav", "start_sample": None, "end_sample": None,
                                       "reviewed": True, "memo": "조용함"})
 
-    # logout -> login again (id only) restores everything
+    # logout -> login again (id only) restores everything, including this id's folder
     c.post("/api/auth/logout", json={"saved": True})
     assert c.get("/api/files/0/label").status_code == 401
-    assert c.get("/api/public").json()["users"] == ["hong"]
     c.post("/api/auth/login", json={"user_id": "hong"})
     me = c.get("/api/me").json()
     assert me["user"]["last_file"] == "a/s1.wav" and me["settings"]["dataset_path"] == str(ds.resolve())
     lab = c.get("/api/files/0/label").json()["label"]
     assert (lab["start_sample"], lab["end_sample"], lab["reviewed"], lab["memo"]) == (s2, e2, 1, "비프 2회")
 
-    # second user labels the same file 50 ms later; everyone may change settings
+    # a second id on the same PC: own folder, sees nothing of hong
+    ds2 = tmp_path / "kim_wavs"
+    ds2.mkdir()
+    (ds2 / "k0.wav").write_bytes((ds / "a" / "s0.wav").read_bytes())
     c.post("/api/auth/logout", json={})
     c.post("/api/auth/login", json={"user_id": "kim", "create": True})
-    assert c.put("/api/settings", json={"dataset_path": str(ds)}).status_code == 200
+    assert c.get("/api/me").json()["settings"]["dataset_path"] == ""      # no folder yet
+    assert c.get("/api/files/0/view").status_code == 409
+    assert c.put("/api/settings", json={"dataset_path": str(tmp_path / "nope")}).status_code == 400
+    assert c.put("/api/settings", json={"dataset_path": str(ds2)}).json()["n_files"] == 1
+    assert [f["file"] for f in c.get("/api/files").json()] == ["k0.wav"]
     s3 = int(0.35 * SR); e3 = s3 + 4410
-    c.put("/api/files/0/label", json={"file": "a/s0.wav", "start_sample": s3, "end_sample": e3, "reviewed": True, "memo": ""})
-    hist = c.get("/api/files/0/history").json()
-    assert {l["user_id"] for l in hist["labels"]} == {"hong", "kim"}
+    c.put("/api/files/0/label", json={"file": "k0.wav", "start_sample": s3, "end_sample": e3, "reviewed": True, "memo": ""})
+    assert {h["user_id"] for h in c.get("/api/files/0/history").json()["history"]} == {"kim"}
+    kim_csv = list(csv.DictReader(io.StringIO(c.get("/api/export/labels.csv").content.decode("utf-8-sig"))))
+    assert [r["user_id"] for r in kim_csv] == ["kim"]
+    assert (float(kim_csv[0]["clip100_start_s"]), float(kim_csv[0]["clip100_end_s"])) == pytest.approx((0.35, 0.45), abs=1e-4)
+    kim_audit = list(csv.DictReader(io.StringIO(c.get("/api/export/audit.csv").content.decode("utf-8-sig"))))
+    assert {r["user_id"] for r in kim_audit} == {"kim"}
 
-    # Excel export: all sheets, who/what/how
+    # back to hong: still hong's folder; hong's export has only hong's work
+    c.post("/api/auth/logout", json={})
+    c.post("/api/auth/login", json={"user_id": "hong"})
+    assert [f["file"] for f in c.get("/api/files").json()] == ["a/s0.wav", "a/s1.wav", "a/s2.wav"]
+    assert {h["user_id"] for h in c.get("/api/files/0/history").json()["history"]} == {"hong"}
     r = c.get("/api/export/xlsx")
-    assert r.status_code == 200
+    assert r.status_code == 200 and "hong" in r.headers["content-disposition"]
     wb = load_workbook(io.BytesIO(r.content))
     assert wb.sheetnames == ["라벨 결과", "작업 이력", "작업자 요약", "파일 현황", "정보"]
     rows = list(wb["라벨 결과"].values)
-    head = rows[0]
-    recs = [dict(zip(head, r)) for r in rows[1:]]
-    hong0 = next(r for r in recs if r["작업자 ID"] == "hong" and r["파일"] == "a/s0.wav")
+    recs = [dict(zip(rows[0], r)) for r in rows[1:]]
+    assert {r["작업자 ID"] for r in recs} == {"hong"}
+    hong0 = next(r for r in recs if r["파일"] == "a/s0.wav")
     assert hong0["비프 구간"] == "0.300~0.400초" and hong0["메모"] == "비프 2회" and hong0["상태"] == "검수 완료"
     assert hong0["길이(ms)"] == 100.0 and hong0["100ms 클립 구간(중심 기준)"] == "0.300~0.400초"
     assert next(r for r in recs if r["파일"] == "a/s1.wav")["비프 여부"] == "없음"
     acts = [dict(zip(list(wb["작업 이력"].values)[0], r)) for r in list(wb["작업 이력"].values)[1:]]
+    assert {a["작업자 ID"] for a in acts} == {"hong"}
     mod = next(a for a in acts if a["동작"] == "구간 수정")
-    assert mod["작업자 ID"] == "hong" and mod["변경 전"] == "0.310~0.390초" and mod["변경 후"] == "0.300~0.400초"
+    assert mod["변경 전"] == "0.310~0.390초" and mod["변경 후"] == "0.300~0.400초"
     assert any(a["동작"] == "저장 후 로그아웃" for a in acts)
-    files_sheet = [dict(zip(list(wb["파일 현황"].values)[0], r)) for r in list(wb["파일 현황"].values)[1:]]
-    assert files_sheet[0]["작업자 간 일치(±20ms)"] == "불일치" and files_sheet[0]["시작 최대 차이(ms)"] == 50.0
+    summary = list(wb["작업자 요약"].values)
+    assert [r[0] for r in summary[1:]] == ["hong"]
 
     # CSV: seconds range + memo, UTF-8 BOM for Excel
     raw = c.get("/api/export/labels.csv").content
     assert raw.startswith(b"\xef\xbb\xbf")
     rows = list(csv.DictReader(io.StringIO(raw.decode("utf-8-sig"))))
-    r0 = next(r for r in rows if r["user_id"] == "hong" and r["file"] == "a/s0.wav")
+    r0 = next(r for r in rows if r["file"] == "a/s0.wav")
     assert (r0["start_s"], r0["end_s"], r0["memo"], r0["duration_ms"]) == ("0.3", "0.4", "비프 2회", "100.0")
-    r1 = next(r for r in rows if r["user_id"] == "kim")
-    assert (float(r1["clip100_start_s"]), float(r1["clip100_end_s"])) == pytest.approx((0.35, 0.45), abs=1e-4)
     frames = list(csv.DictReader(io.StringIO(c.get("/api/export/frames.csv").content.decode("utf-8-sig"))))
-    hong_frames = [f for f in frames if f["user_id"] == "hong" and f["file"] == "a/s0.wav"]
+    hong_frames = [f for f in frames if f["file"] == "a/s0.wav"]
     assert [f["label"] for f in hong_frames][:6] == ["0", "0", "0", "1", "0", "0"]
-    kim_frames = [f for f in frames if f["user_id"] == "kim"]
-    assert [f["overlap_ms"] for f in kim_frames][3:5] == ["50.0", "50.0"]
 
-    # data persists across a server restart
+    # data and each id's folder persist across a server restart
     app2 = App(app.data_dir)
-    assert app2.dataset == ds.resolve()
+    assert app2.path_for("hong") == str(ds.resolve()) and app2.path_for("kim") == str(ds2.resolve())
     assert len(app2.db.labels()) == 3
 
 
@@ -234,7 +245,7 @@ def test_merge_two_pcs_and_history_delete(env, tmp_path):
         read_export(b"not an excel file", "bad.xlsx")
 
 
-def test_history_delete_only_own_rows(env):
+def test_history_only_own_rows(env):
     ds, app, c = env
     c.post("/api/auth/login", json={"user_id": "lee", "create": True})
     c.put("/api/settings", json={"dataset_path": str(ds)})
@@ -242,6 +253,10 @@ def test_history_delete_only_own_rows(env):
     lee_rows = [h["id"] for h in c.get("/api/files/0/history").json()["history"]]
     c.post("/api/auth/logout", json={})
     c.post("/api/auth/login", json={"user_id": "park", "create": True})
+    c.put("/api/settings", json={"dataset_path": str(ds)})
+    assert c.get("/api/files/0/history").json()["history"] == []          # lee's work is not shown
+    assert c.get("/api/files/0/label").json()["label"] is None
     assert c.post("/api/files/0/history/delete", json={"ids": lee_rows}).json()["deleted"] == 0
-    assert c.post("/api/files/1/history/delete", json={"ids": lee_rows}).json()["deleted"] == 0
+    c.post("/api/auth/logout", json={})
+    c.post("/api/auth/login", json={"user_id": "lee"})
     assert len(c.get("/api/files/0/history").json()["history"]) == len(lee_rows)

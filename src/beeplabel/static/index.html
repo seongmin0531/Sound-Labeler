@@ -26,10 +26,8 @@
       <div id="lg-error" class="error"></div>
       <button id="lg-submit" class="primary wide" type="submit">로그인</button>
     </form>
-    <div id="lg-users-wrap" hidden>
-      <div class="muted small" style="margin-top:14px">기존 아이디 (클릭하면 바로 로그인)</div>
-      <div id="lg-users" class="chips"></div>
-    </div>
+    <p class="muted small" style="margin-top:12px">처음 쓰는 아이디를 입력하면 새 아이디가 만들어집니다.
+      다음부터 같은 아이디로 로그인하면 이전 작업이 그대로 이어집니다.</p>
   </div>
 </div>
 
@@ -116,15 +114,11 @@
       <div id="auto-info" class="muted">—</div>
     </section>
     <section>
-      <h3>이 파일의 다른 작업자</h3>
-      <div id="others" class="muted">—</div>
-    </section>
-    <section>
-      <h3>이 파일 작업 이력
+      <h3>이 파일에서 내가 한 작업
         <button id="btn-hist-edit" class="small-btn hist-btn" type="button" title="내 이력 중 잘못 남은 것을 골라 지웁니다">이력 정리</button>
       </h3>
       <div id="hist-tools" class="hist-tools" hidden>
-        <span class="muted small">지울 내 이력을 체크하세요 (다른 아이디 이력은 지울 수 없음)</span>
+        <span class="muted small">지울 이력을 체크하세요 (라벨은 그대로 두고 이력만 지웁니다)</span>
         <div class="row">
           <button id="btn-hist-cancel" type="button">취소</button>
           <button id="btn-hist-delete" class="danger" type="button" disabled>선택 삭제</button>
@@ -144,7 +138,8 @@
       <input id="set-path" placeholder="예: D:\beep_dataset">
     </label>
     <p class="muted small">WAV 파일이 들어 있는 폴더의 전체 경로를 입력하세요 (하위 폴더까지 검색).
-      저장하면 다음 실행에도 그대로 사용되고, 모든 작업자에게 같이 적용됩니다.</p>
+      내 PC 폴더(예: <code>D:\beep_dataset</code>)나 NAS 경로(예: <code>\\NAS\beep</code>, <code>Z:\beep</code>) 모두 됩니다.
+      <b>이 아이디에만</b> 저장되고, 다음에 로그인하면 이 폴더가 자동으로 열립니다.</p>
     <p class="muted small">아이디·라벨·작업 이력 저장 위치: <code id="set-datadir"></code></p>
     <div id="set-error" class="error"></div>
     <div class="row"><button value="cancel">닫기</button><button id="set-save" class="primary" value="default">저장</button></div>
@@ -155,7 +150,8 @@
   <form method="dialog">
     <h3>내보내기</h3>
     <label><input type="checkbox" id="exp-reviewed"> 검수 완료된 라벨만</label>
-    <p class="muted small">모든 작업자의 라벨, 작업 이력(누가 · 언제 · 무엇을 · 어떻게), 메모가 포함됩니다.</p>
+    <p class="muted small">로그인한 아이디의 라벨, 작업 이력(언제 · 무엇을 · 어떻게), 메모가 들어갑니다.
+      팀원들과 비교하려면 각자 받은 엑셀을 아래 "엑셀 합치기"로 합치세요.</p>
     <div class="export-grid">
       <button id="exp-xlsx" class="primary" value="default">📊 엑셀 (.xlsx)</button>
       <span class="muted small">라벨 결과 · 작업 이력 · 작업자 요약 · 파일 현황 · 정보 시트</span>

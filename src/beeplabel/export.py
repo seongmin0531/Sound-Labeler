@@ -13,17 +13,19 @@ from openpyxl.utils import get_column_letter
 
 from . import __version__, regions
 from .db import now, region_text
-from .project import App
+from .project import Dataset
 
 STATUS = {1: "검수 완료", 0: "작업 중"}
 AGREE_TOL_MS = 20.0  # annotators "agree" when both boundaries are within this many ms
 
 
-def collect(app: App, reviewed_only: bool = False, with_auto: bool = True) -> dict:
+def collect(app: Dataset, user_id: str | None = None, reviewed_only: bool = False,
+            with_auto: bool = True) -> dict:
+    """Labels + history of one WAV folder. With user_id (the web UI), only that id's own work."""
     ds = app.dataset_key
-    users = {u["id"]: u for u in app.db.users()}
+    users = {u["id"]: u for u in app.db.users() if user_id is None or u["id"] == user_id}
     files = set(app.files)
-    labels = [l for l in app.db.labels(dataset=ds) if l["file"] in files]
+    labels = [l for l in app.db.labels(dataset=ds, user_id=user_id) if l["file"] in files]
     if reviewed_only:
         labels = [l for l in labels if l["reviewed"]]
     auto = {}
@@ -51,7 +53,8 @@ def collect(app: App, reviewed_only: bool = False, with_auto: bool = True) -> di
         else:
             l["auto_diff_start_ms"] = l["auto_diff_end_ms"] = None
         l["file_duration_s"] = round(n / sr, 3) if sr else None
-    audit = sorted(app.db.audit(dataset=ds) + [a for a in app.db.audit() if a["dataset"] is None],
+    audit = sorted(app.db.audit(dataset=ds, user_id=user_id)
+                   + [a for a in app.db.audit(user_id=user_id) if a["dataset"] is None],
                    key=lambda a: a["id"])
     return {"users": users, "labels": labels, "audit": audit, "auto": auto}
 
@@ -92,7 +95,7 @@ def labels_csv(data: dict) -> bytes:
     return _csv(header, rows)
 
 
-def frames_csv(app: App, data: dict) -> bytes:
+def frames_csv(app: Dataset, data: dict) -> bytes:
     """100 ms grid frames; label = 1 if the region overlaps the frame."""
     def rows():
         for l in data["labels"]:
@@ -306,13 +309,13 @@ RULE_ROWS = [
                       "(파일 끝에서는 안쪽으로 밀어서 100 ms 유지). 나중에 100 ms 샘플을 자를 때 사용합니다."),
     ("작업자 간 일치", f"두 작업자 이상이 라벨링한 파일에서 시작·끝 경계 차이가 모두 {AGREE_TOL_MS:g} ms 이하면 '일치'."),
     ("자동탐지", "협대역 톤 검출기가 찾은 첫 비프의 시작점부터 최대 100 ms. 사람이 검수한 결과가 정답입니다."),
-    ("로그인 방식", "아이디만으로 로그인합니다(팀 공유용). 작업자 ID는 본인 확인을 거친 값이 아닙니다."),
+    ("로그인 방식", "아이디만으로 로그인합니다. 작업자 ID는 본인 확인을 거친 값이 아닙니다."),
 ]
 SHEET_HELP = ("시트 설명", "라벨 결과: 작업자별 최종 구간 / 작업 이력: 누가 언제 무엇을 어떻게 바꿨는지 / "
                           "작업자 요약: 작업자별 진행 현황 / 파일 현황: 파일별 작업자 간 일치 여부")
 
 
-def excel(app: App, data: dict, exported_by: str) -> bytes:
+def excel(app: Dataset, data: dict, exported_by: str) -> bytes:
     labels = data["labels"]
     for l in labels:
         l.setdefault("source", "")

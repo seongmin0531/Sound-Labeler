@@ -1,4 +1,8 @@
-"""Local/LAN web server for the labeling UI (FastAPI). Login is by id only (shared team use)."""
+"""Local web server for the labeling UI (FastAPI).
+
+Login is by id only. Every id works in its own WAV folder and sees only its own labels and
+history; the team compares results by merging the Excel files each person exports.
+"""
 
 from __future__ import annotations
 
@@ -19,7 +23,7 @@ from . import export as ex
 from . import merge as mg
 from .audio import to_mono
 from .db import region_text
-from .project import App
+from .project import App, Dataset
 
 STATIC = Path(__file__).parent / "static"
 COOKIE = "beeplabel_session"
@@ -54,24 +58,30 @@ def create_app(app_state: App) -> FastAPI:
             raise HTTPException(401, "로그인이 필요합니다")
         return u
 
-    def need_dataset():
-        if not A.dataset:
-            raise HTTPException(409, "WAV 데이터 폴더가 지정되지 않았습니다. 설정에서 경로를 지정하세요.")
+    def user_ds(u: dict = Depends(current_user)) -> tuple[dict, Dataset]:
+        ds = A.dataset_for(u["id"])
+        if ds is None:
+            path = A.path_for(u["id"])
+            msg = (f"WAV 폴더에 접근할 수 없습니다: {path} (NAS라면 연결 상태를 확인하세요)" if path
+                   else "WAV 데이터 폴더가 지정되지 않았습니다. 설정에서 경로를 지정하세요.")
+            raise HTTPException(409, msg)
+        return u, ds
 
-    def rel(idx: int) -> str:
-        need_dataset()
-        if not 0 <= idx < len(A.files):
+    def rel(ds: Dataset, idx: int) -> str:
+        if not 0 <= idx < len(ds.files):
             raise HTTPException(404, "파일 번호가 범위를 벗어났습니다. 목록을 새로고침하세요.")
-        return A.files[idx]
+        return ds.files[idx]
 
-    def settings_payload() -> dict:
-        return {"dataset_path": A.dataset_key, "n_files": len(A.files),
+    def settings_payload(u: dict) -> dict:
+        ds = A.dataset_for(u["id"])
+        return {"dataset_path": A.path_for(u["id"]), "reachable": ds is not None,
+                "n_files": len(ds.files) if ds else 0,
                 "max_region_ms": regions.MAX_MS, "data_dir": str(A.data_dir)}
 
     # ---------- public ----------
     @api.get("/api/public")
     def public():
-        return {"version": __version__, "users": [u["id"] for u in db.users()]}
+        return {"version": __version__}
 
     def _start_session(response: Response, uid: str) -> dict:
         token = db.new_session(uid)
@@ -104,7 +114,7 @@ def create_app(app_state: App) -> FastAPI:
 
     @api.get("/api/me")
     def me(u: dict = Depends(current_user)):
-        return {"user": u, "settings": settings_payload(), "version": __version__}
+        return {"user": u, "settings": settings_payload(u), "version": __version__}
 
     @api.put("/api/me/prefs")
     def prefs(body: dict = Body(...), u: dict = Depends(current_user)):
@@ -114,84 +124,85 @@ def create_app(app_state: App) -> FastAPI:
         db.set_prefs(u["id"], **{k: v for k, v in body.items() if k in ("theme", "last_file")})
         return db.get_user(u["id"])
 
-    # ---------- settings (shared by everyone) ----------
+    # ---------- settings (per id) ----------
     @api.get("/api/settings")
     def get_settings(u: dict = Depends(current_user)):
-        return settings_payload()
+        return settings_payload(u)
 
     @api.put("/api/settings")
     def put_settings(body: dict = Body(...), u: dict = Depends(current_user)):
         if "dataset_path" in body:
-            old = A.dataset_key
+            old = A.path_for(u["id"])
             try:
-                A.set_dataset(body["dataset_path"].strip().strip('"'))
+                ds = A.set_user_dataset(u["id"], body["dataset_path"])
             except (FileNotFoundError, OSError) as e:
                 raise HTTPException(400, str(e))
-            if old != A.dataset_key:
-                db.log(u["id"], "데이터 폴더 변경", before=old, after=A.dataset_key,
-                       detail=f"WAV {len(A.files)}개")
-        return settings_payload()
+            if old != ds.dataset_key:
+                db.log(u["id"], "데이터 폴더 변경", before=old or None, after=ds.dataset_key,
+                       detail=f"WAV {len(ds.files)}개")
+        return settings_payload(u)
 
     @api.post("/api/rescan")
-    def rescan(u: dict = Depends(current_user)):
-        need_dataset()
-        A.rescan()
-        return settings_payload()
+    def rescan(ud=Depends(user_ds)):
+        u, ds = ud
+        ds.rescan()
+        return settings_payload(u)
 
-    # ---------- files ----------
+    # ---------- files (this id's folder, this id's labels) ----------
     @api.get("/api/files")
     def files(u: dict = Depends(current_user)):
-        if not A.dataset:
+        ds = A.dataset_for(u["id"])
+        if ds is None:
             return []
-        mine = {l["file"]: l for l in db.labels(dataset=A.dataset_key, user_id=u["id"])}
-        counts: dict[str, int] = {}
-        for l in db.labels(dataset=A.dataset_key):
-            counts[l["file"]] = counts.get(l["file"], 0) + 1
+        mine = {l["file"]: l for l in db.labels(dataset=ds.dataset_key, user_id=u["id"])}
         out = []
-        for i, r in enumerate(A.files):
-            info = A.info(r)
+        for i, r in enumerate(ds.files):
+            info = ds.info(r)
             l = mine.get(r)
             out.append({"idx": i, "file": r, "duration": round(info.duration, 3),
                         "status": ("reviewed" if l["reviewed"] else "draft") if l else "none",
-                        "region": region_text(l["start_s"], l["end_s"]) if l else "",
-                        "n_users": counts.get(r, 0)})
+                        "region": region_text(l["start_s"], l["end_s"]) if l else ""})
         return out
 
     @api.get("/api/files/{idx}/view")
-    def view(idx: int, u: dict = Depends(current_user)):
-        r = rel(idx)
-        data, sr = A.load(r)
+    def view(idx: int, ud=Depends(user_ds)):
+        _, ds = ud
+        r = rel(ds, idx)
+        data, sr = ds.load(r)
         y = to_mono(data)
-        b = A.bounds(r)
+        b = ds.bounds(r)
         env_step = max(1, int(np.ceil(len(y) / 20000)))
         n = len(y) // env_step * env_step
         blocks = y[:n].reshape(-1, env_step) if n else np.zeros((0, 1))
         return {"file": r, "sr": sr, "num_samples": len(y), "channels": data.shape[1],
                 "frame_starts": b[:, 0].tolist(), "frame_ends": b[:, 1].tolist(),
                 "frame_ms": A.config.frames.frame_ms, "max_region_ms": regions.MAX_MS,
-                "auto": A.auto_region(r),
+                "auto": ds.auto_region(r),
                 "wave": {"step": env_step,
                          "min": np.round(blocks.min(axis=1), 4).tolist() if n else [],
                          "max": np.round(blocks.max(axis=1), 4).tolist() if n else []},
                 "spec": _spectrogram(y, sr)}
 
     @api.get("/api/files/{idx}/audio")
-    def audio(idx: int, u: dict = Depends(current_user)):
-        data, sr = A.load(rel(idx))
+    def audio(idx: int, ud=Depends(user_ds)):
+        _, ds = ud
+        data, sr = ds.load(rel(ds, idx))
         buf = io.BytesIO()
         sf.write(buf, np.clip(data, -1, 1), sr, format="WAV", subtype="PCM_16")
         return Response(buf.getvalue(), media_type="audio/wav", headers={"Cache-Control": "no-store"})
 
     @api.get("/api/files/{idx}/label")
-    def get_label(idx: int, u: dict = Depends(current_user)):
-        return {"label": db.get_label(A.dataset_key, rel(idx), u["id"])}
+    def get_label(idx: int, ud=Depends(user_ds)):
+        u, ds = ud
+        return {"label": db.get_label(ds.dataset_key, rel(ds, idx), u["id"])}
 
     @api.put("/api/files/{idx}/label")
-    def put_label(idx: int, body: dict = Body(...), u: dict = Depends(current_user)):
-        r = rel(idx)
+    def put_label(idx: int, body: dict = Body(...), ud=Depends(user_ds)):
+        u, ds = ud
+        r = rel(ds, idx)
         if body.get("file") != r:
             raise HTTPException(409, "파일 목록이 바뀌었습니다. 새로고침하세요.")
-        info = A.info(r)
+        info = ds.info(r)
         try:
             st, en = regions.validate(body.get("start_sample"), body.get("end_sample"),
                                       info.num_samples, info.sample_rate)
@@ -199,27 +210,23 @@ def create_app(app_state: App) -> FastAPI:
             raise HTTPException(400, str(err))
         ss, es = regions.seconds(info.sample_rate, st, en)
         label, actions = db.save_label(
-            A.dataset_key, r, u["id"], start_sample=st, end_sample=en, start_s=ss, end_s=es,
+            ds.dataset_key, r, u["id"], start_sample=st, end_sample=en, start_s=ss, end_s=es,
             reviewed=bool(body.get("reviewed")), memo=str(body.get("memo") or "")[:2000],
-            sample_rate=info.sample_rate, num_samples=info.num_samples, sha256=A.sha256(r))
+            sample_rate=info.sample_rate, num_samples=info.num_samples, sha256=ds.sha256(r))
         db.set_prefs(u["id"], last_file=r)
         return {"label": label, "actions": actions}
 
     @api.get("/api/files/{idx}/history")
-    def history(idx: int, u: dict = Depends(current_user)):
-        r = rel(idx)
-        others = [l for l in db.labels(dataset=A.dataset_key) if l["file"] == r]
-        return {"history": db.audit(dataset=A.dataset_key, file=r, limit=200),
-                "labels": [{"user_id": l["user_id"], "region": region_text(l["start_s"], l["end_s"]),
-                            "reviewed": l["reviewed"], "memo": l["memo"], "updated_at": l["updated_at"]}
-                           for l in others]}
+    def history(idx: int, ud=Depends(user_ds)):
+        """This id's own history for the file (to see what it did before)."""
+        u, ds = ud
+        return {"history": db.audit(dataset=ds.dataset_key, file=rel(ds, idx), user_id=u["id"], limit=500)}
 
     @api.post("/api/files/{idx}/history/delete")
-    def delete_history(idx: int, body: dict = Body(...), u: dict = Depends(current_user)):
-        """Delete selected history rows of this file. Only the logged-in id's own rows."""
+    def delete_history(idx: int, body: dict = Body(...), ud=Depends(user_ds)):
+        u, ds = ud
         ids = [int(i) for i in body.get("ids") or []]
-        n = db.delete_audit(u["id"], A.dataset_key, rel(idx), ids)
-        return {"deleted": n}
+        return {"deleted": db.delete_audit(u["id"], ds.dataset_key, rel(ds, idx), ids)}
 
     # ---------- merge exports from several PCs ----------
     @api.post("/api/merge")
@@ -243,17 +250,19 @@ def create_app(app_state: App) -> FastAPI:
 
     # ---------- export ----------
     @api.get("/api/export/{kind}")
-    def export(kind: str, reviewed_only: bool = False, u: dict = Depends(current_user)):
-        need_dataset()
-        stamp = datetime.now().strftime("%Y%m%d_%H%M")
-        data = ex.collect(A, reviewed_only=reviewed_only, with_auto=kind in ("xlsx", "labels.csv"))
+    def export(kind: str, reviewed_only: bool = False, ud=Depends(user_ds)):
+        """Exports only the logged-in id's own work (file names carry the id for merging)."""
+        u, ds = ud
+        stamp = f"{u['id']}_{datetime.now():%Y%m%d_%H%M}"
+        data = ex.collect(ds, user_id=u["id"], reviewed_only=reviewed_only,
+                          with_auto=kind in ("xlsx", "labels.csv"))
         if kind == "xlsx":
-            body, name, mt = ex.excel(A, data, u["id"]), f"beep_labels_{stamp}.xlsx", \
+            body, name, mt = ex.excel(ds, data, u["id"]), f"beep_labels_{stamp}.xlsx", \
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         elif kind == "labels.csv":
             body, name, mt = ex.labels_csv(data), f"beep_labels_{stamp}.csv", "text/csv"
         elif kind == "frames.csv":
-            body, name, mt = ex.frames_csv(A, data), f"beep_frames_{stamp}.csv", "text/csv"
+            body, name, mt = ex.frames_csv(ds, data), f"beep_frames_{stamp}.csv", "text/csv"
         elif kind == "audit.csv":
             body, name, mt = ex.audit_csv(data), f"beep_audit_{stamp}.csv", "text/csv"
         else:

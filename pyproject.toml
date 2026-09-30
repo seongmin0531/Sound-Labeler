@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "beeplabel"
-version = "0.4.0"
+version = "0.5.0"
 description = "Multi-user vehicle beep region labeling (100 ms grid) with audit log and Excel export"
 readme = "README.md"
 requires-python = ">=3.9"

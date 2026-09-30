@@ -1,7 +1,7 @@
-"""SQLite storage: user ids, sessions, settings, per-user labels and a full audit log.
+"""SQLite storage: user ids, sessions, settings, per-user labels and a personal work history.
 
-Login is by id only (the team shares one server by design), so an id identifies who did
-the work but is not proof of identity. Everything is in one file
+Login is by id only. Each id sees only its own labels and history (a record of what that
+id did, to pick up where it left off); an id is not proof of identity. Everything is in one file
 (default: ~/beeplabel_data/beeplabel.db) and survives restarts, logouts and re-logins.
 """
 
@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS users (
     is_admin INTEGER NOT NULL DEFAULT 0,  -- unused, kept for old databases
     theme TEXT NOT NULL DEFAULT 'dark',
     last_file TEXT,
+    dataset_path TEXT,                    -- this id's own WAV folder (local or NAS)
     created_at TEXT NOT NULL,
     last_login TEXT
 );
@@ -100,6 +101,9 @@ class DB:
 
     @staticmethod
     def _migrate(c):
+        ucols = {r["name"] for r in c.execute("PRAGMA table_info(users)")}
+        if "dataset_path" not in ucols:  # v0.4: one shared folder -> one folder per id
+            c.execute("ALTER TABLE users ADD COLUMN dataset_path TEXT")
         cols = {r["name"] for r in c.execute("PRAGMA table_info(labels)")}
         if "start_sample" not in cols:  # v0.2 stored 100 ms-grid frame indices
             c.execute("ALTER TABLE labels ADD COLUMN start_sample INTEGER")
@@ -142,7 +146,7 @@ class DB:
 
     def get_user(self, user_id: str) -> dict | None:
         with self.conn() as c:
-            r = c.execute("SELECT id,display_name,theme,last_file,created_at,last_login "
+            r = c.execute("SELECT id,display_name,theme,last_file,dataset_path,created_at,last_login "
                           "FROM users WHERE id=?", (user_id,)).fetchone()
         return dict(r) if r else None
 
@@ -152,7 +156,8 @@ class DB:
                 "SELECT id,display_name,created_at,last_login FROM users ORDER BY id")]
 
     def set_prefs(self, user_id: str, **prefs) -> None:
-        allowed = {k: v for k, v in prefs.items() if k in ("theme", "last_file", "display_name")}
+        allowed = {k: v for k, v in prefs.items()
+                   if k in ("theme", "last_file", "display_name", "dataset_path")}
         if not allowed:
             return
         cols = ", ".join(f"{k}=?" for k in allowed)

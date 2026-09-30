@@ -52,14 +52,6 @@ async function showLogin() {
   audio.pause();
   const p = await fetch("/api/public").then((r) => r.json()).catch(() => ({}));
   $("login-version").textContent = p.version ? "v" + p.version : "";
-  const users = p.users || [];
-  $("lg-users-wrap").hidden = !users.length;
-  $("lg-users").innerHTML = "";
-  for (const u of users) {
-    const b = document.createElement("button"); b.type = "button"; b.textContent = u;
-    b.onclick = () => { $("lg-id").value = u; doLogin(false); };
-    $("lg-users").appendChild(b);
-  }
   resetNewId();
   $("lg-id").focus();
 }
@@ -100,14 +92,15 @@ async function startApp() {
   renderDataset();
   resize();
   await loadFiles();
-  if (!S.settings.dataset_path) { openSettings(); return; }
+  if (!S.settings.dataset_path || !S.settings.reachable) { openSettings(); return; }
   const last = S.files.find((f) => f.file === S.me.last_file);
   const first = last || S.files.find((f) => f.status !== "reviewed") || S.files[0];
   if (first) openFile(first.idx);
 }
 function renderDataset() {
   const s = S.settings;
-  $("dataset-label").textContent = s.dataset_path ? `📁 ${s.dataset_path} (${s.n_files}개)` : "📁 WAV 폴더 미지정";
+  $("dataset-label").textContent = !s.dataset_path ? "📁 WAV 폴더 미지정"
+    : s.reachable ? `📁 ${s.dataset_path} (${s.n_files}개)` : `⚠ 폴더에 접근할 수 없음: ${s.dataset_path}`;
   $("dataset-label").title = s.dataset_path || "";
 }
 async function loadFiles() {
@@ -284,7 +277,7 @@ function renderFiles() {
     li.className = f.idx === S.idx ? "active" : "";
     li.innerHTML = `<span class="dot ${f.status}"></span><span class="name" title="${esc(f.file)}">${esc(f.file)}</span>` +
       `<span class="dur">${f.duration.toFixed(1)}s</span>` +
-      (f.region || f.n_users ? `<span class="reg">${esc(f.region)}${f.n_users ? ` · 작업자 ${f.n_users}명` : ""}</span>` : "");
+      (f.region ? `<span class="reg">${esc(f.region)}</span>` : "");
     li.onclick = () => openFile(f.idx);
     ul.appendChild(li);
   }
@@ -321,11 +314,6 @@ async function loadHistory() {
   if (S.idx < 0) return;
   const h = await api(`/api/files/${S.idx}/history`).catch(() => null);
   if (!h) return;
-  const others = h.labels.filter((l) => l.user_id !== S.me.id);
-  $("others").innerHTML = others.length
-    ? others.map((l) => `<div class="others-row"><b>${esc(l.user_id)}</b><span>${esc(l.region)}${l.reviewed ? " ✓" : ""}</span></div>` +
-      (l.memo ? `<div class="muted small">“${esc(l.memo)}”</div>` : "")).join("")
-    : "없음";
   S.history = h.history;
   renderHistory();
 }
@@ -334,10 +322,8 @@ function renderHistory() {
   $("hist-tools").hidden = !editing;
   $("btn-hist-edit").hidden = editing;
   $("history").innerHTML = hist.length ? hist.map((a) => {
-    const mine = a.user_id === S.me.id;
-    const box = editing && mine ? `<input type="checkbox" class="hist-check" value="${a.id}">` : "";
-    const cls = editing ? (mine ? "mine-sel" : "locked") : "";
-    return `<li class="${cls}">${box}<div><span class="t">${esc(a.ts)} · <b>${esc(a.user_id)}</b></span>${esc(a.action)}` +
+    const box = editing ? `<input type="checkbox" class="hist-check" value="${a.id}">` : "";
+    return `<li class="${editing ? "mine-sel" : ""}">${box}<div><span class="t">${esc(a.ts)}</span>${esc(a.action)}` +
       (a.before || a.after ? `: ${a.before ? esc(a.before) + " → " : ""}${esc(a.after || "")}` : "") + `</div></li>`;
   }).join("") : `<li class="muted">아직 없음</li>`;
   $("history").querySelectorAll(".hist-check").forEach((c) => (c.onchange = updateHistDelete));
@@ -353,7 +339,7 @@ $("btn-hist-cancel").onclick = () => { S.histEdit = false; renderHistory(); };
 $("btn-hist-delete").onclick = async () => {
   const ids = [...$("history").querySelectorAll(".hist-check:checked")].map((c) => +c.value);
   if (!ids.length) return;
-  if (!confirm(`선택한 내 작업 이력 ${ids.length}건을 삭제할까요?\n삭제하면 되돌릴 수 없고, 엑셀·CSV에서도 빠집니다.\n(비프 구간·메모 등 라벨 자체는 바뀌지 않습니다)`)) return;
+  if (!confirm(`선택한 작업 이력 ${ids.length}건을 삭제할까요?\n삭제하면 되돌릴 수 없고, 엑셀·CSV에서도 빠집니다.\n(비프 구간·메모 등 라벨 자체는 바뀌지 않습니다)`)) return;
   try {
     const r = await api(`/api/files/${S.idx}/history/delete`, { method: "POST", body: JSON.stringify({ ids }) });
     setSaveState(`작업 이력 ${r.deleted}건 삭제됨`);
@@ -658,7 +644,8 @@ $("btn-rescan").onclick = async () => { S.settings = await api("/api/rescan", { 
 function openSettings() {
   $("set-path").value = S.settings.dataset_path;
   $("set-datadir").textContent = S.settings.data_dir;
-  $("set-error").textContent = "";
+  $("set-error").textContent = S.settings.dataset_path && !S.settings.reachable
+    ? "저장된 폴더에 접근할 수 없습니다. NAS 연결을 확인하거나 경로를 다시 지정하세요." : "";
   $("dlg-settings").showModal();
 }
 $("btn-settings").onclick = openSettings;
