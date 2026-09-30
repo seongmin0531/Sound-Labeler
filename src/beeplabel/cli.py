@@ -116,6 +116,23 @@ def cmd_agree(a):
     print("  100 ms 프레임 단위:", fmt(fs.summary()))
 
 
+def cmd_merge(a):
+    from .merge import MergeError, merge_paths
+
+    try:
+        body, rep = merge_paths(a.files)
+    except MergeError as e:
+        sys.exit(str(e))
+    out = Path(a.out or f"beep_labels_merged_{datetime.now():%Y%m%d_%H%M}.xlsx")
+    out.write_bytes(body)
+    print(f"{len(a.files)}개 파일 -> {out.resolve()}")
+    print(f"  라벨 {rep['labels']}개, 작업 이력 {rep['audit']}개, 작업자 {', '.join(rep['users'])}")
+    for c in rep["conflicts"]:
+        print("  [내용이 다른 중복]", c)
+    if rep["sha_mismatch"]:
+        print("  [경고] PC마다 오디오 내용이 다른 파일:", ", ".join(rep["sha_mismatch"]))
+
+
 def cmd_demo(a):
     import numpy as np
     import soundfile as sf
@@ -166,6 +183,11 @@ def main(argv=None):
     sp.add_argument("--users", nargs=2, required=True, metavar=("A", "B"), help="'auto' 사용 가능")
     sp.add_argument("--reviewed-only", action="store_true")
     sp.set_defaults(func=cmd_agree)
+
+    sp = sub.add_parser("merge", help="여러 PC에서 내보낸 엑셀을 하나로 합치기")
+    sp.add_argument("files", nargs="+", help="Beep Labeler에서 내보낸 .xlsx 파일들")
+    sp.add_argument("--out", "-o")
+    sp.set_defaults(func=cmd_merge)
 
     sp = sub.add_parser("demo", help="합성 데모 WAV 생성")
     sp.add_argument("out")

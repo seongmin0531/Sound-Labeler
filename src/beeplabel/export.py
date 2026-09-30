@@ -58,12 +58,21 @@ def collect(app: App, reviewed_only: bool = False, with_auto: bool = True) -> di
 
 # ---------------- CSV ----------------
 
+def _csv_safe(v):
+    """Neutralise spreadsheet formula injection: Excel evaluates CSV cells starting with these."""
+    if v is None:
+        return ""
+    if isinstance(v, str) and v[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + v
+    return v
+
+
 def _csv(header: list[str], rows) -> bytes:
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(header)
     for r in rows:
-        w.writerow(["" if v is None else v for v in r])
+        w.writerow([_csv_safe(v) for v in r])
     return buf.getvalue().encode("utf-8-sig")  # BOM so Excel shows Korean correctly
 
 
@@ -125,10 +134,31 @@ ACTION_FILL = {
     "내보내기": "F2F2F2",
 }
 
+# Column order of the "라벨 결과" sheet. merge.py reads these headers back.
+LABEL_HEADERS = ["번호", "파일", "작업자 ID", "작업자 이름", "상태", "비프 여부", "비프 구간",
+                 "시작(초)", "끝(초)", "길이(ms)", "100ms 클립 구간(중심 기준)", "자동탐지 구간",
+                 "자동 대비 시작 차이(ms)", "자동 대비 끝 차이(ms)", "메모", "수정 횟수",
+                 "최초 작업 일시", "최종 수정 일시", "샘플레이트(Hz)", "파일 길이(초)",
+                 "시작 샘플", "끝 샘플", "SHA-256"]
+LABEL_KEYS = [None, "file", "user_id", "display_name", "status", None, "region",
+              "start_s", "end_s", "duration_ms", "clip_region", "auto_region",
+              "auto_diff_start_ms", "auto_diff_end_ms", "memo", "n_edits",
+              "created_at", "updated_at", "sample_rate", "file_duration_s",
+              "start_sample", "end_sample", "sha256"]
+AUDIT_HEADERS = ["번호", "일시", "작업자 ID", "작업자 이름", "파일", "동작", "변경 전", "변경 후", "비고"]
+SOURCE_HEADER = "출처 파일"
+
 
 def _width(v) -> int:
     s = "" if v is None else str(v)
     return sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in s)
+
+
+def _set(c, v):
+    """Write a value; text starting with '=' stays text (never an Excel formula)."""
+    c.value = v
+    if isinstance(v, str) and v.startswith("="):
+        c.data_type = "s"
 
 
 def _table(ws, headers: list[str], rows: list[list], widths: dict | None = None,
@@ -142,7 +172,8 @@ def _table(ws, headers: list[str], rows: list[list], widths: dict | None = None,
     for i, row in enumerate(rows, 2):
         fill = fills(row) if fills else None
         for j, v in enumerate(row, 1):
-            c = ws.cell(row=i, column=j, value=v)
+            c = ws.cell(row=i, column=j)
+            _set(c, v)
             c.border = BORDER
             c.alignment = Alignment(vertical="top", wrap_text=j in wrap_cols)
             if j in fmt_by_col and isinstance(v, (int, float)):
@@ -160,44 +191,61 @@ def _table(ws, headers: list[str], rows: list[list], widths: dict | None = None,
     ws.freeze_panes = "B2"
 
 
-def excel(app: App, data: dict, exported_by: str) -> bytes:
+def agreement(ls: list[dict]) -> tuple[str, float | None, float | None]:
+    """(verdict, max start diff ms, max end diff ms) for one file's labels from several people."""
+    beeps = [l for l in ls if l["has_beep"]]
+    ds = round(1000 * (max(l["start_s"] for l in beeps) - min(l["start_s"] for l in beeps)), 1) if len(beeps) >= 2 else None
+    de = round(1000 * (max(l["end_s"] for l in beeps) - min(l["end_s"] for l in beeps)), 1) if len(beeps) >= 2 else None
+    if len(ls) < 2:
+        return "—", ds, de
+    if 0 < len(beeps) < len(ls):
+        return "불일치", ds, de  # someone says beep, someone says no beep
+    if not beeps:
+        return "일치", ds, de
+    return ("일치" if max(ds, de) <= AGREE_TOL_MS else "불일치"), ds, de
+
+
+def write_workbook(labels: list[dict], audit: list[dict], users: dict, files: list[tuple],
+                   auto_by_file: dict, title: str, info_rows: list[tuple],
+                   with_source: bool = False) -> bytes:
+    """labels/audit: normalised dicts (see collect() / merge.read_export()).
+    users: {id: {display_name, created_at, last_login}}; files: [(file, duration_s)]."""
     wb = Workbook()
-    labels, users = data["labels"], data["users"]
-    sec3 = {"시작(초)": "0.000", "끝(초)": "0.000"}
+    src = [SOURCE_HEADER] if with_source else []
 
     # 1) labels
     ws = wb.active
     ws.title = "라벨 결과"
-    headers = ["번호", "파일", "작업자 ID", "작업자 이름", "상태", "비프 여부", "비프 구간",
-               "시작(초)", "끝(초)", "길이(ms)", "100ms 클립 구간(중심 기준)", "자동탐지 구간",
-               "자동 대비 시작 차이(ms)", "자동 대비 끝 차이(ms)", "메모", "수정 횟수",
-               "최초 작업 일시", "최종 수정 일시", "샘플레이트(Hz)", "파일 길이(초)"]
-    rows = [[n, l["file"], l["user_id"], l["display_name"], l["status"],
-             "있음" if l["has_beep"] else "없음", l["region"], l["start_s"], l["end_s"],
-             l["duration_ms"], l["clip_region"], l["auto_region"], l["auto_diff_start_ms"],
-             l["auto_diff_end_ms"], l["memo"], l["n_edits"], l["created_at"], l["updated_at"],
-             l["sample_rate"], l["file_duration_s"]] for n, l in enumerate(labels, 1)]
-    _table(ws, headers, rows, widths={"메모": 40}, wrap_cols={15}, formats=sec3,
-           fills=lambda r: FILL.get(r[4]))
+    rows = []
+    for n, l in enumerate(labels, 1):
+        row = []
+        for h, k in zip(LABEL_HEADERS, LABEL_KEYS):
+            if h == "번호":
+                row.append(n)
+            elif h == "비프 여부":
+                row.append("있음" if l["has_beep"] else "없음")
+            else:
+                row.append(l.get(k))
+        rows.append(row + ([l.get("source", "")] if with_source else []))
+    _table(ws, LABEL_HEADERS + src, rows, widths={"메모": 40, "SHA-256": 20}, wrap_cols={15},
+           formats={"시작(초)": "0.000", "끝(초)": "0.000"}, fills=lambda r: FILL.get(r[4]))
 
     # 2) audit trail
     ws = wb.create_sheet("작업 이력")
-    headers = ["번호", "일시", "작업자 ID", "작업자 이름", "파일", "동작", "변경 전", "변경 후", "비고"]
-    rows = [[a["id"], a["ts"], a["user_id"] or "",
-             users.get(a["user_id"], {}).get("display_name", a["user_id"] or ""),
+    rows = [[n, a["ts"], a["user_id"] or "", a.get("display_name") or users.get(a["user_id"], {}).get("display_name", a["user_id"] or ""),
              a["file"] or "", a["action"], a["before"] or "", a["after"] or "", a["detail"] or ""]
-            for a in data["audit"]]
-    _table(ws, headers, rows, widths={"변경 전": 30, "변경 후": 30, "비고": 30}, wrap_cols={7, 8, 9},
+            + ([a.get("source", "")] if with_source else []) for n, a in enumerate(audit, 1)]
+    _table(ws, AUDIT_HEADERS + src, rows, widths={"변경 전": 30, "변경 후": 30, "비고": 30}, wrap_cols={7, 8, 9},
            fills=lambda r: PatternFill("solid", fgColor=ACTION_FILL[r[5]]) if r[5] in ACTION_FILL else None)
 
     # 3) per-user summary
     ws = wb.create_sheet("작업자 요약")
-    n_files = len(app.files)
+    n_files = len(files)
     by_user = defaultdict(list)
     for l in labels:
         by_user[l["user_id"]].append(l)
     acts = defaultdict(int)
-    for a in data["audit"]:
+    for a in audit:
         acts[a["user_id"]] += 1
     headers = ["작업자 ID", "작업자 이름", "생성 일시", "마지막 로그인", "작업한 파일 수", "검수 완료",
                "작업 중", "비프 있음", "비프 없음", "평균 구간 길이(ms)", "작업 이력 수",
@@ -205,10 +253,11 @@ def excel(app: App, data: dict, exported_by: str) -> bytes:
     rows = []
     for uid, u in users.items():
         ls = by_user.get(uid, [])
-        durs = [l["duration_ms"] for l in ls if l["duration_ms"] is not None]
-        done = sum(l["reviewed"] for l in ls)
-        rows.append([uid, u["display_name"], u["created_at"], u["last_login"] or "", len(ls), done,
-                     len(ls) - done, sum(l["has_beep"] for l in ls), sum(not l["has_beep"] for l in ls),
+        durs = [l["duration_ms"] for l in ls if l.get("duration_ms") is not None]
+        done = sum(bool(l["reviewed"]) for l in ls)
+        rows.append([uid, u.get("display_name") or uid, u.get("created_at") or "", u.get("last_login") or "",
+                     len(ls), done, len(ls) - done, sum(l["has_beep"] for l in ls),
+                     sum(not l["has_beep"] for l in ls),
                      round(sum(durs) / len(durs), 1) if durs else None, acts.get(uid, 0),
                      f"{done}/{n_files} ({100 * done / n_files:.1f}%)" if n_files else "-"])
     _table(ws, headers, rows)
@@ -222,55 +271,58 @@ def excel(app: App, data: dict, exported_by: str) -> bytes:
                f"작업자 간 일치(±{AGREE_TOL_MS:g}ms)", "시작 최대 차이(ms)", "끝 최대 차이(ms)",
                "자동탐지 구간", "메모 모음"]
     rows = []
-    for f in app.files:
+    for f, dur in files:
         ls = by_file.get(f, [])
-        beeps = [l for l in ls if l["has_beep"]]
-        ds = round(1000 * (max(l["start_s"] for l in beeps) - min(l["start_s"] for l in beeps)), 1) if len(beeps) >= 2 else None
-        de = round(1000 * (max(l["end_s"] for l in beeps) - min(l["end_s"] for l in beeps)), 1) if len(beeps) >= 2 else None
-        if len(ls) < 2:
-            agree = "—"
-        elif 0 < len(beeps) < len(ls):
-            agree = "불일치"  # someone says beep, someone says no beep
-        elif not beeps:
-            agree = "일치"
-        else:
-            agree = "일치" if max(ds, de) <= AGREE_TOL_MS else "불일치"
-        a = data["auto"].get(f)
-        rows.append([f, round(app.info(f).duration, 3), len(ls),
-                     ", ".join(l["user_id"] for l in ls if l["reviewed"]),
-                     "\n".join(f"{l['user_id']}: {l['region']}" for l in ls), agree, ds, de,
-                     region_text(a["start_s"], a["end_s"]) if a else "",
+        verdict, ds, de = agreement(ls)
+        rows.append([f, dur, len(ls), ", ".join(l["user_id"] for l in ls if l["reviewed"]),
+                     "\n".join(f"{l['user_id']}: {l['region']}" for l in ls), verdict, ds, de,
+                     auto_by_file.get(f, ""),
                      "\n".join(f"{l['user_id']}: {l['memo']}" for l in ls if l["memo"])])
     _table(ws, headers, rows, widths={"작업자별 구간": 38, "메모 모음": 40}, wrap_cols={5, 10},
            fills=lambda r: FILL.get(r[5]))
 
     # 5) info
     ws = wb.create_sheet("정보")
-    ws["A1"] = "Beep Labeler 내보내기 정보"
+    ws["A1"] = title
     ws["A1"].font = TITLE_FONT
-    info_rows = [
-        ("생성 일시", now()), ("내보낸 사람", exported_by), ("데이터 폴더", app.dataset_key),
-        ("툴 버전", __version__),
-        ("라벨 규칙", f"샘플(파일)마다 비프 구간은 최대 1개이며 길이는 0~{regions.MAX_MS:g} ms 입니다. "
-                     "구간은 오디오를 자르지 않고 표시만 합니다. '비프 없음'은 해당 샘플에 비프가 없다고 "
-                     "작업자가 판단한 것입니다."),
-        ("100ms 클립 구간", "표시한 구간의 중심을 기준으로 양옆 50 ms씩 잡은 100 ms 창입니다 "
-                          "(파일 끝에서는 안쪽으로 밀어서 100 ms 유지). 나중에 100 ms 샘플을 자를 때 사용합니다."),
-        ("작업자 간 일치", f"두 작업자 이상이 라벨링한 파일에서 시작·끝 경계 차이가 모두 {AGREE_TOL_MS:g} ms 이하면 '일치'."),
-        ("자동탐지", "협대역 톤 검출기가 찾은 첫 비프의 시작점부터 최대 100 ms. 사람이 검수한 결과가 정답입니다."),
-        ("로그인 방식", "아이디만으로 로그인합니다(팀 공유용). 작업자 ID는 본인 확인을 거친 값이 아닙니다."),
-        ("탐지 설정 해시", app.config.digest()),
-        ("전체 파일 수", len(app.files)), ("라벨 수(작업자×파일)", len(labels)),
-        ("작업자 수", len(users)), ("작업 이력 수", len(data["audit"])),
-        ("시트 설명", "라벨 결과: 작업자별 최종 구간 / 작업 이력: 누가 언제 무엇을 어떻게 바꿨는지 전부 / "
-                    "작업자 요약: 작업자별 진행 현황 / 파일 현황: 파일별 작업자 간 일치 여부"),
-    ]
     for i, (k, v) in enumerate(info_rows, 3):
         ws.cell(row=i, column=1, value=k).font = Font(bold=True)
-        ws.cell(row=i, column=2, value=v).alignment = Alignment(wrap_text=True, vertical="top")
+        c = ws.cell(row=i, column=2)
+        _set(c, v)
+        c.alignment = Alignment(wrap_text=True, vertical="top")
     ws.column_dimensions["A"].width = 22
     ws.column_dimensions["B"].width = 100
 
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+RULE_ROWS = [
+    ("라벨 규칙", f"샘플(파일)마다 비프 구간은 최대 1개이며 길이는 0~{regions.MAX_MS:g} ms 입니다. "
+                 "구간은 오디오를 자르지 않고 표시만 합니다. '비프 없음'은 해당 샘플에 비프가 없다고 "
+                 "작업자가 판단한 것입니다."),
+    ("100ms 클립 구간", "표시한 구간의 중심을 기준으로 양옆 50 ms씩 잡은 100 ms 창입니다 "
+                      "(파일 끝에서는 안쪽으로 밀어서 100 ms 유지). 나중에 100 ms 샘플을 자를 때 사용합니다."),
+    ("작업자 간 일치", f"두 작업자 이상이 라벨링한 파일에서 시작·끝 경계 차이가 모두 {AGREE_TOL_MS:g} ms 이하면 '일치'."),
+    ("자동탐지", "협대역 톤 검출기가 찾은 첫 비프의 시작점부터 최대 100 ms. 사람이 검수한 결과가 정답입니다."),
+    ("로그인 방식", "아이디만으로 로그인합니다(팀 공유용). 작업자 ID는 본인 확인을 거친 값이 아닙니다."),
+]
+SHEET_HELP = ("시트 설명", "라벨 결과: 작업자별 최종 구간 / 작업 이력: 누가 언제 무엇을 어떻게 바꿨는지 / "
+                          "작업자 요약: 작업자별 진행 현황 / 파일 현황: 파일별 작업자 간 일치 여부")
+
+
+def excel(app: App, data: dict, exported_by: str) -> bytes:
+    labels = data["labels"]
+    for l in labels:
+        l.setdefault("source", "")
+    audit = [{**a, "display_name": data["users"].get(a["user_id"], {}).get("display_name", a["user_id"])}
+             for a in data["audit"]]
+    auto_by_file = {f: region_text(a["start_s"], a["end_s"]) for f, a in data["auto"].items() if a}
+    files = [(f, round(app.info(f).duration, 3)) for f in app.files]
+    info = [("생성 일시", now()), ("내보낸 사람", exported_by), ("데이터 폴더", app.dataset_key),
+            ("툴 버전", __version__), *RULE_ROWS, ("탐지 설정 해시", app.config.digest()),
+            ("전체 파일 수", len(app.files)), ("라벨 수(작업자×파일)", len(labels)),
+            ("작업자 수", len(data["users"])), ("작업 이력 수", len(audit)), SHEET_HELP]
+    return write_workbook(labels, audit, data["users"], files, auto_by_file,
+                          "Beep Labeler 내보내기 정보", info)

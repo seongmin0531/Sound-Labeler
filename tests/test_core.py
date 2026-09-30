@@ -163,3 +163,85 @@ def test_full_flow(env, tmp_path):
     app2 = App(app.data_dir)
     assert app2.dataset == ds.resolve()
     assert len(app2.db.labels()) == 3
+
+
+def _pc(tmp_path, name, ds):
+    """One annotator's own PC: its own DB, same WAV files."""
+    c = TestClient(create_app(App(tmp_path / f"pc_{name}")))
+    c.post("/api/auth/login", json={"user_id": name, "create": True})
+    c.put("/api/settings", json={"dataset_path": str(ds)})
+    return c
+
+
+def test_merge_two_pcs_and_history_delete(env, tmp_path):
+    from beeplabel.merge import MergeError, merge, read_export
+
+    ds, _, _ = env
+    hong, kim = _pc(tmp_path, "hong", ds), _pc(tmp_path, "kim", ds)
+    lab = lambda c, i, s, e, memo="", rev=True: c.put(f"/api/files/{i}/label", json={
+        "file": f"a/s{i}.wav", "start_sample": s, "end_sample": e, "reviewed": rev, "memo": memo})
+    lab(hong, 0, 13230, 17640, "=HYPERLINK(\"http://x\")")   # formula-looking memo
+    lab(hong, 1, None, None, "조용함")
+    lab(kim, 0, 13230 + 441, 17640 + 441)                    # 10 ms later -> agrees (<=20 ms)
+    lab(kim, 1, 4410, 8820)                                  # kim hears a beep -> disagrees
+
+    # history clean-up: only own rows of this file can be deleted
+    hist = hong.get("/api/files/0/history").json()["history"]
+    memo_row = next(h for h in hist if h["action"] == "메모 작성")
+    assert hong.post("/api/files/0/history/delete", json={"ids": [memo_row["id"]]}).json()["deleted"] == 1
+    assert all(h["action"] != "메모 작성" for h in hong.get("/api/files/0/history").json()["history"])
+    assert hong.get("/api/files/0/label").json()["label"]["memo"].startswith("=HYPERLINK")  # label unchanged
+
+    xh, xk = hong.get("/api/export/xlsx").content, kim.get("/api/export/xlsx").content
+    # formula text is stored as text, never as a formula
+    ws = load_workbook(io.BytesIO(xh))["라벨 결과"]
+    memo_cell = next(c for c in ws["O"] if c.value and str(c.value).startswith("=HYPERLINK"))
+    assert memo_cell.data_type == "s"
+    assert b"'=HYPERLINK" in hong.get("/api/export/labels.csv").content
+
+    # merge in the browser API, and exporting the same file twice is de-duplicated
+    b64 = lambda b: __import__("base64").b64encode(b).decode()
+    r = hong.post("/api/merge", json={"files": [{"name": "hong.xlsx", "data": b64(xh)},
+                                                  {"name": "kim.xlsx", "data": b64(xk)},
+                                                  {"name": "hong_again.xlsx", "data": b64(xh)}]}).json()
+    rep = r["report"]
+    assert rep["labels"] == 4 and rep["users"] == ["hong", "kim"] and rep["duplicates"] == 2
+    assert rep["conflicts"] == [] and rep["sha_mismatch"] == []
+    wb = load_workbook(io.BytesIO(__import__("base64").b64decode(r["data"])))
+    assert wb.sheetnames == ["라벨 결과", "작업 이력", "작업자 요약", "파일 현황", "정보"]
+    recs = [dict(zip(list(wb["라벨 결과"].values)[0], v)) for v in list(wb["라벨 결과"].values)[1:]]
+    assert {(x["파일"], x["작업자 ID"], x["출처 파일"]) for x in recs} == {
+        ("a/s0.wav", "hong", "hong.xlsx"), ("a/s1.wav", "hong", "hong.xlsx"),
+        ("a/s0.wav", "kim", "kim.xlsx"), ("a/s1.wav", "kim", "kim.xlsx")}
+    files = {v[0]: dict(zip(list(wb["파일 현황"].values)[0], v)) for v in list(wb["파일 현황"].values)[1:]}
+    assert files["a/s0.wav"]["작업자 간 일치(±20ms)"] == "일치" and files["a/s0.wav"]["시작 최대 차이(ms)"] == 10.0
+    assert files["a/s1.wav"]["작업자 간 일치(±20ms)"] == "불일치"
+    acts = [(v[2], v[5]) for v in list(wb["작업 이력"].values)[1:]]
+    assert acts.count(("hong", "구간 지정")) == 1 and acts.count(("kim", "구간 지정")) == 2
+    assert ("hong", "메모 작성") in acts  # file 1 memo stays; the deleted file-0 memo row is gone
+    assert sum(1 for a in acts if a == ("hong", "메모 작성")) == 1
+    summ = {v[0]: v for v in list(wb["작업자 요약"].values)[1:]}
+    assert summ["hong"][4] == 2 and summ["kim"][4] == 2
+
+    # merged workbook can be merged again; conflicting edits of the same id are reported
+    kim.put("/api/files/0/label", json={"file": "a/s0.wav", "start_sample": 0, "end_sample": 4410,
+                                        "reviewed": True, "memo": "다시 봄"})
+    xk2 = kim.get("/api/export/xlsx").content
+    body, rep2 = merge([read_export(__import__("base64").b64decode(r["data"]), "merged.xlsx"),
+                        read_export(xk2, "kim_v2.xlsx")])
+    assert len(rep2["conflicts"]) == 1 and "kim_v2.xlsx" in rep2["conflicts"][0]
+    with pytest.raises(MergeError):
+        read_export(b"not an excel file", "bad.xlsx")
+
+
+def test_history_delete_only_own_rows(env):
+    ds, app, c = env
+    c.post("/api/auth/login", json={"user_id": "lee", "create": True})
+    c.put("/api/settings", json={"dataset_path": str(ds)})
+    c.put("/api/files/0/label", json={"file": "a/s0.wav", "start_sample": 0, "end_sample": 100, "reviewed": False, "memo": ""})
+    lee_rows = [h["id"] for h in c.get("/api/files/0/history").json()["history"]]
+    c.post("/api/auth/logout", json={})
+    c.post("/api/auth/login", json={"user_id": "park", "create": True})
+    assert c.post("/api/files/0/history/delete", json={"ids": lee_rows}).json()["deleted"] == 0
+    assert c.post("/api/files/1/history/delete", json={"ids": lee_rows}).json()["deleted"] == 0
+    assert len(c.get("/api/files/0/history").json()["history"]) == len(lee_rows)

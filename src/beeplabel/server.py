@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__, regions
 from . import export as ex
+from . import merge as mg
 from .audio import to_mono
 from .db import region_text
 from .project import App
@@ -212,6 +213,33 @@ def create_app(app_state: App) -> FastAPI:
                 "labels": [{"user_id": l["user_id"], "region": region_text(l["start_s"], l["end_s"]),
                             "reviewed": l["reviewed"], "memo": l["memo"], "updated_at": l["updated_at"]}
                            for l in others]}
+
+    @api.post("/api/files/{idx}/history/delete")
+    def delete_history(idx: int, body: dict = Body(...), u: dict = Depends(current_user)):
+        """Delete selected history rows of this file. Only the logged-in id's own rows."""
+        ids = [int(i) for i in body.get("ids") or []]
+        n = db.delete_audit(u["id"], A.dataset_key, rel(idx), ids)
+        return {"deleted": n}
+
+    # ---------- merge exports from several PCs ----------
+    @api.post("/api/merge")
+    def merge_exports(body: dict = Body(...), u: dict = Depends(current_user)):
+        files = body.get("files") or []
+        if not 1 <= len(files) <= 100:
+            raise HTTPException(400, "엑셀 파일을 1~100개 선택하세요.")
+        exports = []
+        try:
+            for f in files:
+                raw = base64.b64decode(f.get("data") or "")
+                if len(raw) > 50 * 1024 * 1024:
+                    raise mg.MergeError(f"{f.get('name')}: 50MB를 넘는 파일입니다")
+                exports.append(mg.read_export(raw, str(f.get("name") or "file.xlsx")))
+            out, report = mg.merge(exports)
+        except mg.MergeError as e:
+            raise HTTPException(400, str(e))
+        name = f"beep_labels_merged_{datetime.now():%Y%m%d_%H%M}.xlsx"
+        db.log(u["id"], "엑셀 합치기", detail=f"{name} ← " + ", ".join(e["name"] for e in exports))
+        return {"name": name, "data": base64.b64encode(out).decode(), "report": report}
 
     # ---------- export ----------
     @api.get("/api/export/{kind}")

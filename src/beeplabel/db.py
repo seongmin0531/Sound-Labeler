@@ -287,3 +287,13 @@ class DB:
             q += f" LIMIT {int(limit)}"
         with self.conn() as c:
             return [dict(r) for r in c.execute(q, args)]
+
+    def delete_audit(self, user_id: str, dataset: str, file: str, ids: list[int]) -> int:
+        """Permanently delete history rows (by request: no trace is kept). Only rows that
+        belong to `user_id` and to this file are touched; the labels themselves are unchanged."""
+        if not ids:
+            return 0
+        marks = ",".join("?" * len(ids))
+        with self.conn() as c:
+            return c.execute(f"DELETE FROM audit WHERE user_id=? AND dataset=? AND file=? AND id IN ({marks})",
+                             (user_id, dataset, file, *ids)).rowcount

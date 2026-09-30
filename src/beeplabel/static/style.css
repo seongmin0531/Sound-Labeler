@@ -107,3 +107,12 @@ table.keys td:first-child { color: var(--accent2); white-space: nowrap; }
   #sidebar { max-height: 200px; border-right: 0; border-bottom: 1px solid var(--line); }
   #inspector { border-left: 0; border-top: 1px solid var(--line); }
 }
+
+/* history clean-up */
+.hist-btn { float: right; font-size: 11px; padding: 1px 8px; letter-spacing: 0; text-transform: none; }
+.hist-tools { background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; }
+.history li.mine-sel { list-style: none; margin-left: -18px; display: flex; gap: 6px; align-items: flex-start; }
+.history li.mine-sel input { margin-top: 3px; }
+.history li.locked { opacity: .55; }
+button.danger { background: #a3302a; border-color: #c2413a; color: #fff; }
+#merge-result { white-space: pre-wrap; max-height: 200px; overflow: auto; }

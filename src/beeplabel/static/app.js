@@ -326,11 +326,41 @@ async function loadHistory() {
     ? others.map((l) => `<div class="others-row"><b>${esc(l.user_id)}</b><span>${esc(l.region)}${l.reviewed ? " ✓" : ""}</span></div>` +
       (l.memo ? `<div class="muted small">“${esc(l.memo)}”</div>` : "")).join("")
     : "없음";
-  $("history").innerHTML = h.history.length ? h.history.map((a) =>
-    `<li><span class="t">${esc(a.ts)} · <b>${esc(a.user_id)}</b></span>${esc(a.action)}` +
-    (a.before || a.after ? `: ${a.before ? esc(a.before) + " → " : ""}${esc(a.after || "")}` : "") + `</li>`).join("")
-    : `<li class="muted">아직 없음</li>`;
+  S.history = h.history;
+  renderHistory();
 }
+function renderHistory() {
+  const hist = S.history || [], editing = S.histEdit;
+  $("hist-tools").hidden = !editing;
+  $("btn-hist-edit").hidden = editing;
+  $("history").innerHTML = hist.length ? hist.map((a) => {
+    const mine = a.user_id === S.me.id;
+    const box = editing && mine ? `<input type="checkbox" class="hist-check" value="${a.id}">` : "";
+    const cls = editing ? (mine ? "mine-sel" : "locked") : "";
+    return `<li class="${cls}">${box}<div><span class="t">${esc(a.ts)} · <b>${esc(a.user_id)}</b></span>${esc(a.action)}` +
+      (a.before || a.after ? `: ${a.before ? esc(a.before) + " → " : ""}${esc(a.after || "")}` : "") + `</div></li>`;
+  }).join("") : `<li class="muted">아직 없음</li>`;
+  $("history").querySelectorAll(".hist-check").forEach((c) => (c.onchange = updateHistDelete));
+  updateHistDelete();
+}
+function updateHistDelete() {
+  const n = $("history").querySelectorAll(".hist-check:checked").length;
+  $("btn-hist-delete").disabled = !n;
+  $("btn-hist-delete").textContent = n ? `선택 삭제 (${n})` : "선택 삭제";
+}
+$("btn-hist-edit").onclick = () => { S.histEdit = true; renderHistory(); };
+$("btn-hist-cancel").onclick = () => { S.histEdit = false; renderHistory(); };
+$("btn-hist-delete").onclick = async () => {
+  const ids = [...$("history").querySelectorAll(".hist-check:checked")].map((c) => +c.value);
+  if (!ids.length) return;
+  if (!confirm(`선택한 내 작업 이력 ${ids.length}건을 삭제할까요?\n삭제하면 되돌릴 수 없고, 엑셀·CSV에서도 빠집니다.\n(비프 구간·메모 등 라벨 자체는 바뀌지 않습니다)`)) return;
+  try {
+    const r = await api(`/api/files/${S.idx}/history/delete`, { method: "POST", body: JSON.stringify({ ids }) });
+    setSaveState(`작업 이력 ${r.deleted}건 삭제됨`);
+  } catch (e) { setSaveState("이력 삭제 실패: " + e.message, true); }
+  S.histEdit = false;
+  loadHistory();
+};
 
 // ================= open / save =================
 function stateJSON() { return JSON.stringify({ r: S.region, v: S.reviewed, m: S.memo, h: S.hasLabel }); }
@@ -349,7 +379,7 @@ async function openFile(idx) {
     [view, lab] = await Promise.all([api(`/api/files/${idx}/view`), api(`/api/files/${idx}/label`)]);
   } catch (e) { setSaveState("불러오기 실패: " + e.message, true); return; }
   if (S.idx !== idx) return;  // user moved on meanwhile
-  S.view = view; S.undo = []; S.redo = [];
+  S.view = view; S.undo = []; S.redo = []; S.histEdit = false;
   const l = lab.label;
   S.hasLabel = !!l;
   S.region = l && l.start_sample != null ? [l.start_sample, l.end_sample] : null;
@@ -644,6 +674,44 @@ $("set-save").onclick = async (ev) => {
 };
 
 $("btn-export").onclick = () => $("dlg-export").showModal();
+
+// ---- merge Excel exports from several PCs ----
+$("merge-files").onchange = () => {
+  const n = $("merge-files").files.length;
+  $("merge-run").disabled = !n;
+  $("merge-result").textContent = n ? `${n}개 선택됨: ${[...$("merge-files").files].map((f) => f.name).join(", ")}` : "";
+};
+function fileToBase64(f) {
+  return new Promise((ok, fail) => {
+    const r = new FileReader();
+    r.onload = () => ok(String(r.result).split(",")[1]);
+    r.onerror = () => fail(r.error);
+    r.readAsDataURL(f);
+  });
+}
+$("merge-run").onclick = async (ev) => {
+  ev.preventDefault();
+  const files = [...$("merge-files").files];
+  if (!files.length) return;
+  $("merge-run").disabled = true;
+  $("merge-result").textContent = "합치는 중…";
+  try {
+    const payload = await Promise.all(files.map(async (f) => ({ name: f.name, data: await fileToBase64(f) })));
+    const r = await api("/api/merge", { method: "POST", body: JSON.stringify({ files: payload }) });
+    const bin = Uint8Array.from(atob(r.data), (c) => c.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bin], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    const a = document.createElement("a"); a.href = url; a.download = r.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    const rep = r.report;
+    let msg = `완료: ${r.name}\n라벨 ${rep.labels}개 · 작업 이력 ${rep.audit}개 · 작업자 ${rep.users.join(", ")} · 파일 ${rep.files}개`;
+    if (rep.duplicates) msg += `\n중복 ${rep.duplicates}개는 가장 최근 수정본을 사용했습니다.`;
+    if (rep.conflicts.length) msg += `\n\n[내용이 다른 중복]\n` + rep.conflicts.join("\n");
+    if (rep.sha_mismatch.length) msg += `\n\n[경고] PC마다 오디오 내용이 다른 파일:\n` + rep.sha_mismatch.join("\n");
+    $("merge-result").textContent = msg;
+  } catch (e) { $("merge-result").textContent = "합치기 실패: " + e.message; }
+  $("merge-run").disabled = false;
+};
 for (const [id, kind] of [["exp-xlsx", "xlsx"], ["exp-labels", "labels.csv"], ["exp-frames", "frames.csv"], ["exp-audit", "audit.csv"]]) {
   $(id).onclick = async (ev) => {
     ev.preventDefault();
