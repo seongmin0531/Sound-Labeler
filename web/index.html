@@ -195,8 +195,6 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
       <h3>메모 (데이터 특징)</h3>
       <textarea id="memo" rows="4" placeholder="예: 비프 2회 반복, 배경에 음악, 창문 열림…" aria-label="메모"></textarea>
       <div class="muted small">자동 저장되며 엑셀·CSV의 memo 열에 들어갑니다.</div>
-      <h3>자동 제안</h3>
-      <div id="auto-info" class="muted num">—</div>
       <h3>이 파일에서 내가 한 작업 <button id="btn-hist-edit" class="hist-btn" type="button">이력 정리</button></h3>
       <div id="hist-tools" hidden>
         <span class="muted small">지울 이력을 체크하세요 (라벨은 그대로 두고 이력만 지웁니다)</span>
@@ -767,12 +765,6 @@ function draw() {
   }
   const st = V.fb.starts, en = V.fb.ends, f0 = frameAt(S.v0), f1 = frameAt(Math.max(0, S.v1 - 1)), fw = xOf(en[0]) - xOf(st[0]);
   if (fw > 5) { ctx.strokeStyle = C.grid; for (let i = f0; i <= f1; i++) { const x = Math.round(xOf(st[i])) + 0.5; ctx.beginPath(); ctx.moveTo(x, wy0); ctx.lineTo(x, fy1); ctx.stroke(); } }
-  const au = V.auto;
-  if (au && au.start_sample != null) {
-    const x0 = xOf(au.start_sample), x1 = xOf(au.end_sample);
-    ctx.strokeStyle = C.auto; ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.strokeRect(x0 + 1, wy0 + 1, x1 - x0 - 2, sy1 - wy0 - 2); ctx.setLineDash([]); ctx.lineWidth = 1;
-    ctx.fillStyle = C.auto; ctx.font = "10px sans-serif"; ctx.fillText("자동", x0 + 3, sy1 - 5);
-  }
   if (S.region) {
     const x0 = xOf(S.region[0]), x1 = xOf(S.region[1]);
     ctx.fillStyle = C.region; ctx.fillRect(x0, wy0, x1 - x0, fy1 - wy0);
@@ -802,8 +794,6 @@ function refreshPanels() {
   $("region-text").textContent = regText(S.region);
   $("region-detail").textContent = S.region ? `길이 ${Math.round(msOf(S.region[1] - S.region[0]) / 10) * 10} ms · 샘플 [${S.region[0]}, ${S.region[1]})` : "";
   $("file-state").innerHTML = S.reviewed ? `<span style="color:var(--ok)">● 검수 완료</span>` : S.hasLabel ? `<span style="color:var(--draft)">● 작업 중</span>` : `<span class="muted">○ 미작업</span>`;
-  const au = S.view.auto;
-  $("auto-info").innerHTML = au == null ? "분석 중…" : au.start_sample != null ? `${fl2(au.start_s)} ~ ${fl2(au.end_s)}초 <span class="muted small">(파란 점선, 참고용)</span>` : "탐지된 비프 없음";
   $("btn-play-seg").disabled = !S.region;
   updateStatus();
 }
@@ -877,7 +867,7 @@ async function openFile(i) {
   loadHistory();
   setTimeout(async () => {  // detection after first paint
     try { const a = await autoRegion(V.sha, V.mono, V.sr); if (S.view === V) { V.auto = a; refreshPanels(); draw(); } }
-    catch (e) { if (S.view === V) { V.auto = { start_sample: null }; $("auto-info").textContent = "자동 분석 실패: " + e.message; } }
+    catch (e) { if (S.view === V) { V.auto = { start_sample: null }; } }
   }, 30);
 }
 function scheduleSave() { clearTimeout(S.saveTimer); if (!isDirty()) return; setSave("변경됨 · 자동 저장 대기…"); S.saveTimer = setTimeout(save, 700); }
