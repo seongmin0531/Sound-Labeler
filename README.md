@@ -130,6 +130,9 @@ git pull
 
 ## 8. 관리자 명령
 
+`beeplabel` 명령이 보안 정책 때문에 막히면 `python -m beeplabel ...`로 똑같이 실행할 수 있습니다
+(Windows 가상환경에서는 `.venv\Scripts\python -m beeplabel users`).
+
 ```bash
 beeplabel users                     # 계정 목록
 beeplabel reset-password kim        # 비밀번호 초기화 (잊어버린 경우)
