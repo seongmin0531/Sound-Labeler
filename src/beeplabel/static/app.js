@@ -49,7 +49,7 @@ readColors();
 // ================= login (id only) =================
 async function showLogin() {
   $("app-view").hidden = true; $("login-view").hidden = false;
-  $("audio").pause();
+  audio.pause();
   const p = await fetch("/api/public").then((r) => r.json()).catch(() => ({}));
   $("login-version").textContent = p.version ? "v" + p.version : "";
   const users = p.users || [];
@@ -357,7 +357,7 @@ async function openFile(idx) {
   $("memo").value = S.memo;
   S.saved = stateJSON();
   S.v0 = 0; S.v1 = view.num_samples; S.cursor = 0;
-  audio.src = `/api/files/${idx}/audio`;
+  loadAudio(idx).catch((e) => setSaveState("오디오 불러오기 실패: " + e.message, true));
   buildSpec(); refreshPanels(); draw();
   setSaveState(l ? `마지막 저장 ${l.updated_at}` : "아직 저장된 라벨 없음");
   const li = $("files").querySelector("li.active"); if (li) li.scrollIntoView({ block: "nearest" });
@@ -504,31 +504,60 @@ function setView(a, b) {
 function zoom(f, c) { c = c ?? (S.v0 + S.v1) / 2; setView(c - (c - S.v0) * f, c + (S.v1 - c) * f); }
 
 // ================= playback =================
-const audio = $("audio");
+// Web Audio: the whole file is decoded once, then any [from, to) span is played exactly.
+// (An <audio> element needs HTTP range support to seek; without it every play restarted at 0.)
+const audio = {
+  ctx: null, buf: null, src: null, t0: 0, offset: 0, playing: false, loadId: 0,
+  get paused() { return !this.playing; },
+  get currentTime() { return this.playing ? this.offset + (this.ctx.currentTime - this.t0) : this.offset; },
+  pause() {
+    if (this.src) { this.src.onended = null; try { this.src.stop(); } catch (e) {} this.src = null; }
+    this.playing = false;
+  },
+};
+async function loadAudio(idx) {
+  const id = ++audio.loadId;
+  audio.pause(); audio.buf = null;
+  audio.ctx = audio.ctx || new (window.AudioContext || window.webkitAudioContext)();
+  const data = await fetch(`/api/files/${idx}/audio`, { credentials: "same-origin" }).then((r) => r.arrayBuffer());
+  const buf = await audio.ctx.decodeAudioData(data);
+  if (id === audio.loadId) audio.buf = buf;  // ignore if the user already moved to another file
+}
 function play(from, to = null) {
-  if (!S.view) return;
-  audio.currentTime = from / S.view.sr; S.playEnd = to;
-  audio.play().then(tick).catch(() => {});
+  if (!S.view || !audio.buf) { setSaveState("오디오를 불러오는 중입니다. 잠시 후 다시 눌러 주세요."); return; }
+  audio.pause();
+  if (audio.ctx.state === "suspended") audio.ctx.resume();
+  const src = audio.ctx.createBufferSource();
+  src.buffer = audio.buf; src.connect(audio.ctx.destination);
+  const offset = from / S.view.sr;
+  if (to !== null) src.start(0, offset, Math.max(0, (to - from) / S.view.sr));  // stops exactly at `to`
+  else src.start(0, offset);
+  src.onended = () => { if (audio.src === src) { audio.pause(); S.playEnd = null; tick(); } };
+  audio.src = src; audio.t0 = audio.ctx.currentTime; audio.offset = offset; audio.playing = true;
+  S.playEnd = to;
+  tick();
 }
 function playAll() {
   if (!S.view) return;
-  if (!audio.paused && S.playEnd === null) { stop(); return; }
+  if (audio.playing && S.playEnd === null) { stop(); return; }
   play(S.cursor >= nSamp() - 100 ? 0 : S.cursor);
 }
-function playSeg() { if (S.region) play(S.region[0], S.region[1]); }
+function playSeg() {
+  if (!S.region) return;
+  if (audio.playing && S.playEnd !== null) { stop(); return; }
+  play(S.region[0], S.region[1]);
+}
 function stop() { audio.pause(); S.playEnd = null; tick(); }
-function seekIfPlaying() { if (!audio.paused && S.playEnd === null) audio.currentTime = S.cursor / S.view.sr; }
+function seekIfPlaying() { if (audio.playing && S.playEnd === null) play(S.cursor); }
 function tick() {
-  const playing = !audio.paused;
+  const playing = audio.playing;
   $("btn-play-all").classList.toggle("active", playing && S.playEnd === null);
   $("btn-play-seg").classList.toggle("active", playing && S.playEnd !== null);
   if (!playing || !S.view) { draw(); return; }
   const s = audio.currentTime * S.view.sr;
-  if (S.playEnd !== null && s >= S.playEnd) { stop(); return; }
   if (s > S.v1 || s < S.v0) { const span = S.v1 - S.v0; setView(s - span * 0.1, s + span * 0.9); }
   draw(); requestAnimationFrame(tick);
 }
-audio.addEventListener("ended", () => { S.playEnd = null; tick(); });
 
 // ================= keyboard =================
 window.addEventListener("keydown", async (ev) => {
