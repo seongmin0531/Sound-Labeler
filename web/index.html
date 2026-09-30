@@ -94,8 +94,8 @@ main { min-width: 0; min-height: 0; display: flex; flex-direction: column; overf
 #toolbar .grp { display: flex; gap: 4px; flex-wrap: wrap; }
 #title-row { display: flex; gap: 12px; align-items: baseline; padding: 8px 14px 4px; flex-wrap: wrap; }
 #file-title { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
-#wrap { height: 214px; padding-inline: 12px; flex: none; transition: height .15s; }
-#wrap.big { height: 520px; }
+#wrap { height: 380px; padding-inline: 12px; flex: none; transition: height .15s; }
+#wrap.big { height: 700px; }
 @media (prefers-reduced-motion: reduce) { #wrap { transition: none; } }
 canvas { width: 100%; height: 100%; display: block; border: 1px solid var(--line); border-radius: var(--r); cursor: crosshair; touch-action: none; }
 #region-bar { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; padding: 10px 14px 4px; }
@@ -126,7 +126,7 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
   #layout { grid-template-columns: minmax(0, 1fr); }
   #side { max-height: 260px; border-right: 0; border-bottom: 1px solid var(--line); }
   #insp { border-left: 0; border-top: 1px solid var(--line); }
-  #wrap { height: 240px; }
+  #wrap { height: 340px; }
 }
 </style>
 
@@ -177,9 +177,8 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
       <div id="toolbar">
         <div class="grp"><button id="btn-play-all" title="Space">▶ 전체 듣기</button><button id="btn-play-seg" title="Enter">▶ 구간만 듣기</button><button id="btn-stop" title="Esc">■ 정지</button></div>
         <div class="grp"><button id="btn-zin" title="=">＋</button><button id="btn-zout" title="-">－</button><button id="btn-fit" title="F">전체 보기</button><button id="btn-big" title="B">스펙트로그램 크게 보기</button></div>
-        <div class="grp"><button id="btn-auto" title="A">자동 제안 적용</button><button id="btn-nobeep" title="Delete">비프 없음</button></div>
         <div class="grp"><button id="btn-save" title="Ctrl+S">저장</button><button id="btn-review" class="primary" title="R">검수 완료 → 다음</button></div>
-        <label class="small muted row" for="gain">파형 배율 <select id="gain"><option>1</option><option>2</option><option>4</option><option>8</option><option>16</option></select></label>
+        <label class="small muted row" for="gain">파형 배율 <select id="gain"><option value="1">자동 맞춤</option><option value="2">×2</option><option value="4">×4</option><option value="8">×8</option></select></label>
       </div>
       <div id="title-row"><span id="file-title">—</span><span id="file-state"></span><span class="spacer"></span><span id="save-state" class="muted small"></span></div>
       <div id="empty" class="note" hidden></div>
@@ -188,7 +187,7 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
         <div><span class="muted">비프 구간</span> <span id="region-text">—</span></div>
         <div id="region-detail" class="muted small num"></div>
         <span class="spacer"></span>
-        <div class="muted small"><b>드래그</b>: 0~100 ms 구간 · <b>클릭</b>: 클릭 지점 ±50 ms · 파일당 1구간</div>
+        <div class="muted small"><b>드래그</b>: 원하는 길이로 구간 지정 · <b>클릭</b>: 클릭 지점 ±50 ms · 10 ms 단위 · 파일당 1구간</div>
       </div>
       <div id="status"></div>
     </main>
@@ -201,7 +200,7 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
       <h3>이 파일에서 내가 한 작업 <button id="btn-hist-edit" class="hist-btn" type="button">이력 정리</button></h3>
       <div id="hist-tools" hidden>
         <span class="muted small">지울 이력을 체크하세요 (라벨은 그대로 두고 이력만 지웁니다)</span>
-        <div class="row end"><button id="btn-hist-cancel" type="button">취소</button><button id="btn-hist-del" class="danger" type="button" disabled>선택 삭제</button></div>
+        <div class="row end"><button id="btn-hist-all" type="button">전체 선택</button><span class="spacer"></span><button id="btn-hist-cancel" type="button">취소</button><button id="btn-hist-del" class="danger" type="button" disabled>선택 삭제</button></div>
       </div>
       <ul id="history"></ul>
     </aside>
@@ -244,15 +243,13 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
 <dialog id="dlg-help">
   <h2>사용법 · 단축키</h2>
   <table class="keys">
-    <tr><td>드래그</td><td>비프 구간 지정 (0~100 ms, 1 ms 단위, 파일당 1구간)</td></tr>
+    <tr><td>드래그</td><td>비프 구간 지정 (길이 제한 없음, 10 ms 단위, 파일당 1구간)</td></tr>
     <tr><td>클릭</td><td>클릭 지점 중심 ±50 ms, 100 ms 구간 선택</td></tr>
-    <tr><td>가장자리 드래그</td><td>시작/끝 조정 (최대 100 ms 유지)</td></tr>
+    <tr><td>가장자리 드래그</td><td>시작/끝 조정 (10 ms 단위)</td></tr>
     <tr><td>구간 안 드래그</td><td>구간 이동</td></tr>
-    <tr><td>시간축 클릭</td><td>재생 커서 이동</td></tr>
-    <tr><td>Space / Enter</td><td>전체 듣기(커서부터) / 구간만 듣기</td></tr>
+    <tr><td>Space / Enter</td><td>전체 듣기(처음부터 끝까지) / 구간만 듣기</td></tr>
     <tr><td>Esc</td><td>정지</td></tr>
-    <tr><td>[ ]  ; '</td><td>구간 시작 / 끝 ∓1 ms (Shift: 10 ms)</td></tr>
-    <tr><td>A / Delete</td><td>자동 제안 적용 / 비프 없음</td></tr>
+    <tr><td>[ ]  ; '</td><td>구간 시작 / 끝 ∓10 ms (Shift: 100 ms)</td></tr>
     <tr><td>휠, Shift+휠</td><td>확대·축소, 좌우 이동</td></tr>
     <tr><td>= - F B T</td><td>확대 / 축소 / 전체 보기 / 스펙트로그램 크게 / 테마</td></tr>
     <tr><td>R</td><td>검수 완료 + 다음 파일</td></tr>
@@ -272,14 +269,15 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
    detection, labels and history (IndexedDB), Excel export/merge. Nothing is uploaded.
    The Excel layout matches the desktop (Python) version, so files from both merge.
    ========================================================================== */
-const VERSION = "web-0.5.0";
+const VERSION = "web-0.6.0";
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const pad2 = (n) => String(n).padStart(2, "0");
 function now() { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`; }
 const stamp = () => { const d = new Date(); return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}_${pad2(d.getHours())}${pad2(d.getMinutes())}`; };
 const r6 = (x) => Math.round(x * 1e6) / 1e6;
-const regionText = (s, e) => (s == null ? "비프 없음" : `${s.toFixed(3)}~${e.toFixed(3)}초`);
+const fl2 = (x) => (Math.floor(x * 100 + 1e-6) / 100).toFixed(2);           // 1.245 s -> "1.24"
+const regionText = (s, e) => (s == null ? "비프 없음" : `${fl2(s)}~${fl2(e)}초`);
 const rint = (x) => { const f = Math.floor(x), d = x - f; return d > 0.5 ? f + 1 : d < 0.5 ? f : (f % 2 === 0 ? f : f + 1); }; // numpy-style round-half-even
 let toastT;
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 3200); }
@@ -710,7 +708,7 @@ let W = 0, H = 0, DPR = 1, P = {};
 function resize() {
   const r = cv.getBoundingClientRect(); DPR = window.devicePixelRatio || 1; W = r.width; H = r.height;
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
-  const axis = 20, frames = 26, wave = S.big ? 110 : 56, spec = Math.max(60, H - axis - frames - wave - 6);
+  const axis = 20, frames = 26, half = Math.max(60, Math.floor((H - axis - frames - 6) / 2)), wave = half, spec = half;
   P = { wave: [0, wave], spec: [wave + 2, wave + 2 + spec], frames: [wave + 4 + spec, wave + 4 + spec + frames] };
   P.axis = [P.frames[1] + 2, P.frames[1] + 2 + axis];
   draw();
@@ -727,8 +725,13 @@ function lowerBound(a, v) { let lo = 0, hi = a.length; while (lo < hi) { const m
 const nF = () => S.view.fb.starts.length;
 function frameAt(s) { return Math.min(lowerBound(S.view.fb.ends, s + 1), nF() - 1); }
 function boundary(k) { return k < nF() ? S.view.fb.starts[k] : S.view.fb.ends[nF() - 1]; }
-function regText(r) { if (!r) return S.hasLabel || S.reviewed ? "비프 없음" : "지정 안 됨"; return `${(r[0] / S.view.sr).toFixed(3)} ~ ${(r[1] / S.view.sr).toFixed(3)}초`; }
-function centered(c) { const L = Math.min(maxLen(), nS()); const s = Math.max(0, Math.min(nS() - L, Math.round(c) - Math.floor(L / 2))); return [s, s + L]; }
+// Region boundaries sit on a 10 ms grid (k * sr / 100 samples); the beep region has no length limit.
+const step10 = () => S.view.sr / 100;
+const toGrid = (s) => Math.max(0, Math.min(nS(), rint(Math.floor(s / step10() + 1e-9) * step10())));
+const gridSec = (s) => Math.floor(s / step10() + 1e-6) / 100;
+function regText(r) { if (!r) return S.hasLabel || S.reviewed ? "비프 없음" : "지정 안 됨"; return `${gridSec(r[0]).toFixed(2)} ~ ${gridSec(r[1]).toFixed(2)}초`; }
+function centered(c) { const L = Math.min(maxLen(), nS()), s0 = toGrid(Math.max(0, Math.min(nS() - L, c - L / 2))); return [s0, Math.min(nS(), rint(s0 + L))]; }
+function minSpan(r) { const st = Math.max(1, rint(step10())); if (r[1] - r[0] < st) { if (r[0] + st <= nS()) r[1] = r[0] + st; else r[0] = Math.max(0, r[1] - st); } return r; }
 
 const LUT = (() => {
   const st = [[0, [8, 8, 20]], [0.25, [40, 20, 90]], [0.5, [150, 40, 110]], [0.75, [245, 120, 40]], [1, [252, 250, 180]]], lut = new Uint8ClampedArray(768);
@@ -754,7 +757,8 @@ function draw() {
     for (let f = st; f < sp.fmax; f += st) ctx.fillText(`${f / 1000}k`, 3, sy1 - (f / sp.fmax) * (sy1 - sy0) + 3);
   }
   ctx.fillStyle = C.track; ctx.fillRect(0, wy0, W, wy1 - wy0);
-  const wv = V.wave, mid = (wy0 + wy1) / 2, amp = (wy1 - wy0) / 2 * S.gain; ctx.fillStyle = C.wave;
+  // auto-fit: the loudest sample fills the lane at x1; the gain menu zooms further
+  const wv = V.wave, mid = (wy0 + wy1) / 2, amp = (wy1 - wy0) / 2 * 0.95 * S.gain / V.peak; ctx.fillStyle = C.wave;
   for (let x = 0; x < W; x++) {
     const a = Math.floor(sOf(x) / wv.step), b = Math.max(a + 1, Math.floor(sOf(x + 1) / wv.step));
     if (b <= 0 || a >= wv.min.length) continue;
@@ -774,7 +778,7 @@ function draw() {
     ctx.fillStyle = C.region; ctx.fillRect(x0, wy0, x1 - x0, fy1 - wy0);
     ctx.strokeStyle = C["region-line"]; ctx.lineWidth = 2; for (const x of [x0, x1]) { ctx.beginPath(); ctx.moveTo(x, wy0); ctx.lineTo(x, fy1); ctx.stroke(); } ctx.lineWidth = 1;
     ctx.fillStyle = C["region-line"]; ctx.font = "600 11px 'IBM Plex Mono', monospace";
-    ctx.fillText(`${regText(S.region)} (${msOf(S.region[1] - S.region[0]).toFixed(0)}ms)`, Math.max(2, x0 + 4), wy0 + 12);
+    ctx.fillText(`${regText(S.region)} (${Math.round(msOf(S.region[1] - S.region[0]) / 10) * 10}ms)`, Math.max(2, x0 + 4), wy0 + 12);
   }
   ctx.fillStyle = C.track; ctx.fillRect(0, fy0, W, fy1 - fy0);
   for (let i = f0; i <= f1; i++) {
@@ -796,13 +800,11 @@ function draw() {
 function refreshPanels() {
   if (!S.view) return;
   $("region-text").textContent = regText(S.region);
-  const tooLong = S.region && S.region[1] - S.region[0] > maxLen();
-  $("region-detail").textContent = S.region ? `길이 ${msOf(S.region[1] - S.region[0]).toFixed(1)} ms (최대 ${MAX_MS} ms) · 샘플 [${S.region[0]}, ${S.region[1]})` : "";
+  $("region-detail").textContent = S.region ? `길이 ${Math.round(msOf(S.region[1] - S.region[0]) / 10) * 10} ms · 샘플 [${S.region[0]}, ${S.region[1]})` : "";
   $("file-state").innerHTML = S.reviewed ? `<span style="color:var(--ok)">● 검수 완료</span>` : S.hasLabel ? `<span style="color:var(--draft)">● 작업 중</span>` : `<span class="muted">○ 미작업</span>`;
   const au = S.view.auto;
-  $("auto-info").innerHTML = au == null ? "분석 중…" : au.start_sample != null ? `${au.start_s.toFixed(3)} ~ ${au.end_s.toFixed(3)}초 <span class="muted small">(파란 점선)</span>` : "탐지된 비프 없음";
+  $("auto-info").innerHTML = au == null ? "분석 중…" : au.start_sample != null ? `${fl2(au.start_s)} ~ ${fl2(au.end_s)}초 <span class="muted small">(파란 점선, 참고용)</span>` : "탐지된 비프 없음";
   $("btn-play-seg").disabled = !S.region;
-  if (tooLong) $("region-detail").textContent += " ⚠ 100 ms를 넘습니다";
   updateStatus();
 }
 function updateStatus() {
@@ -825,9 +827,17 @@ function renderHistory() {
     (a.before || a.after ? `: ${a.before ? esc(a.before) + " → " : ""}${esc(a.after || "")}` : "") + `</div></li>`).join("") : `<li class="muted">아직 없음</li>`;
   $("history").querySelectorAll(".hc").forEach((c) => (c.onchange = histCount)); histCount();
 }
-function histCount() { const n = $("history").querySelectorAll(".hc:checked").length; $("btn-hist-del").disabled = !n; $("btn-hist-del").textContent = n ? `선택 삭제 (${n})` : "선택 삭제"; }
+function histCount() {
+  const boxes = $("history").querySelectorAll(".hc"), n = $("history").querySelectorAll(".hc:checked").length;
+  $("btn-hist-del").disabled = !n; $("btn-hist-del").textContent = n ? `선택 삭제 (${n})` : "선택 삭제";
+  $("btn-hist-all").textContent = boxes.length && n === boxes.length ? "전체 해제" : "전체 선택"; $("btn-hist-all").disabled = !boxes.length;
+}
 $("btn-hist-edit").onclick = () => { S.histEdit = true; renderHistory(); };
 $("btn-hist-cancel").onclick = () => { S.histEdit = false; renderHistory(); };
+$("btn-hist-all").onclick = () => {
+  const boxes = [...$("history").querySelectorAll(".hc")], all = boxes.length && boxes.every((c) => c.checked);
+  boxes.forEach((c) => (c.checked = !all)); histCount();
+};
 $("btn-hist-del").onclick = async () => {
   const ids = [...$("history").querySelectorAll(".hc:checked")].map((c) => +c.value);
   if (!ids.length || !(await ask("작업 이력 삭제", `선택한 작업 이력 ${ids.length}건을 삭제할까요?\n되돌릴 수 없고 엑셀·CSV에서도 빠집니다.\n(비프 구간·메모 등 라벨은 바뀌지 않습니다)`, "삭제"))) return;
@@ -851,7 +861,7 @@ async function openFile(i) {
     const d = decodeWav(buf), sha = await sha256hex(buf), fb = frameBounds(d.n, d.sr);
     const step = Math.max(1, Math.ceil(d.n / 20000)), nb = Math.floor(d.n / step), mn = new Float32Array(nb), mx = new Float32Array(nb);
     for (let b = 0; b < nb; b++) { let lo = 1, hi = -1; for (let j = b * step; j < (b + 1) * step; j++) { const v = d.mono[j]; if (v < lo) lo = v; if (v > hi) hi = v; } mn[b] = lo; mx[b] = hi; }
-    V = { file: f.rel, sr: d.sr, n: d.n, chans: d.chans, mono: d.mono, sha, fb, subtype: d.subtype, wave: { step, min: mn, max: mx }, spec: spectrogram(d.mono, d.sr), auto: null };
+    V = { file: f.rel, sr: d.sr, n: d.n, chans: d.chans, mono: d.mono, sha, fb, subtype: d.subtype, wave: { step, min: mn, max: mx }, peak: Math.max(1e-6, ...mx.map(Math.abs), ...mn.map(Math.abs)), spec: spectrogram(d.mono, d.sr), auto: null };
     f.info = { sr: d.sr, n: d.n, ch: d.chans.length };
   } catch (e) { S.view = null; showEmpty(`<b>${esc(f.rel)}</b> 파일을 열 수 없습니다: ${esc(e.message)}`); setSave("열기 실패", true); draw(); return; }
   if (S.idx !== i) return;
@@ -875,11 +885,10 @@ async function flushSave() { clearTimeout(S.saveTimer); if (S.saving) await S.sa
 async function save() {
   if (!S.view || S.idx < 0) return;
   clearTimeout(S.saveTimer);
-  if (S.region && S.region[1] - S.region[0] > maxLen()) { setSave("구간이 100 ms를 넘어 저장하지 않았습니다", true); return; }
   const snap = stateJSON(), V = S.view, rel = S.files[S.idx].rel, reg = S.region;
   S.saving = (async () => {
     const r = await saveLabel(S.me.id, S.folder, rel, {
-      start_sample: reg ? reg[0] : null, end_sample: reg ? reg[1] : null, start_s: reg ? r6(reg[0] / V.sr) : null, end_s: reg ? r6(reg[1] / V.sr) : null,
+      start_sample: reg ? reg[0] : null, end_sample: reg ? reg[1] : null, start_s: reg ? Math.floor(reg[0] * 100 / V.sr + 1e-6) / 100 : null, end_s: reg ? Math.floor(reg[1] * 100 / V.sr + 1e-6) / 100 : null,
       reviewed: S.reviewed, memo: S.memo, sample_rate: V.sr, num_samples: V.n, sha256: V.sha,
       file_duration_s: Math.round(V.n / V.sr * 1000) / 1000, auto: V.auto && V.auto.start_sample !== undefined ? { start_s: V.auto.start_s, end_s: V.auto.end_s } : null });
     myLabels.set(rel, r.label);
@@ -897,12 +906,11 @@ function pushUndo() { S.undo.push(snapshot()); if (S.undo.length > 200) S.undo.s
 function changed() { S.hasLabel = true; refreshPanels(); draw(); scheduleSave(); }
 const undo = () => { if (S.undo.length) { S.redo.push(snapshot()); S.region = JSON.parse(S.undo.pop()); changed(); } };
 const redo = () => { if (S.redo.length) { S.undo.push(snapshot()); S.region = JSON.parse(S.redo.pop()); changed(); } };
-function applyAuto() { const a = S.view.auto; if (!a) { toast("자동 분석 중입니다."); return; } pushUndo(); S.region = a.start_sample != null ? [a.start_sample, a.end_sample] : null; changed(); }
-function noBeep() { pushUndo(); S.region = null; changed(); }
 function shift(which, dMs) {
   if (!S.region) return; pushUndo();
   const d = Math.round(dMs * S.view.sr / 1000), r = [...S.region];
-  if (which === 0) r[0] = Math.max(0, r[1] - maxLen(), Math.min(r[1] - 1, r[0] + d)); else r[1] = Math.min(nS(), r[0] + maxLen(), Math.max(r[0] + 1, r[1] + d));
+  const st = Math.max(1, rint(step10()));
+  if (which === 0) r[0] = toGrid(Math.max(0, Math.min(r[1] - st, r[0] + d))); else r[1] = Math.min(nS(), Math.max(r[0] + st, toGrid(r[1] + d)));
   S.region = r; changed();
 }
 let drag = null;
@@ -927,9 +935,9 @@ cv.addEventListener("pointermove", (ev) => {
   if (drag) {
     const s = clampS(sOf(Math.max(0, Math.min(W, x))));
     if (Math.abs(x - drag.x0) > 3) drag.moved = true;
-    if (drag.mode === "edge" && drag.moved) { const rr = [...S.region]; if (drag.side === 0) rr[0] = Math.max(rr[1] - maxLen(), Math.min(s, rr[1] - 1)); else rr[1] = Math.min(rr[0] + maxLen(), Math.max(s, rr[0] + 1)); S.region = rr; }
-    else if (drag.mode === "move" && drag.moved) { const len = drag.r0[1] - drag.r0[0], st = Math.max(0, Math.min(nS() - len, drag.r0[0] + sOf(x) - drag.s0)); S.region = [st, st + len]; }
-    else if (drag.mode === "create" && drag.moved) { const a = drag.anchor, L = maxLen(); S.region = s >= a ? [a, Math.min(s, a + L)] : [Math.max(s, a - L), a]; if (S.region[1] <= S.region[0]) S.region[1] = S.region[0] + 1; }
+    if (drag.mode === "edge" && drag.moved) { const rr = [...S.region], st = Math.max(1, rint(step10())); if (drag.side === 0) rr[0] = Math.min(toGrid(s), rr[1] - st); else rr[1] = Math.max(toGrid(s), rr[0] + st); S.region = [Math.max(0, rr[0]), Math.min(nS(), rr[1])]; }
+    else if (drag.mode === "move" && drag.moved) { const len = drag.r0[1] - drag.r0[0], st = toGrid(Math.max(0, Math.min(nS() - len, drag.r0[0] + sOf(x) - drag.s0))); S.region = [st, Math.min(nS(), st + len)]; }
+    else if (drag.mode === "create" && drag.moved) { const a = drag.anchor; S.region = minSpan([toGrid(Math.min(a, s)), toGrid(Math.max(a, s))]); }
     refreshPanels();
   } else {
     const rg = regionAt(y); let cur = "crosshair";
@@ -975,9 +983,9 @@ function play(from, to = null) {
   A.src = src; A.t0 = A.ctx.currentTime; A.off = off; A.playing = true; S.playEnd = to; tick();
 }
 function stop(redraw = true) { if (A.src) { A.src.onended = null; try { A.src.stop(); } catch (e) {} A.src = null; } A.playing = false; S.playEnd = null; if (redraw) tick(); }
-function playAll() { if (!S.view) return; if (A.playing && S.playEnd == null) { stop(); return; } play(S.cursor >= nS() - 100 ? 0 : S.cursor); }
+function playAll() { if (!S.view) return; if (A.playing && S.playEnd == null) { stop(); return; } play(0); }  // whole file, start to end
 function playSeg() { if (!S.region) return; if (A.playing && S.playEnd != null) { stop(); return; } play(S.region[0], S.region[1]); }
-function seekIfPlaying() { if (A.playing && S.playEnd == null) play(S.cursor); }
+function seekIfPlaying() {}
 function tick() {
   $("btn-play-all").classList.toggle("on", A.playing && S.playEnd == null); $("btn-play-seg").classList.toggle("on", A.playing && S.playEnd != null);
   if (!A.playing || !S.view) { draw(); return; }
@@ -988,18 +996,18 @@ function tick() {
 /* ============================== keys & buttons ============================== */
 function nextFile(d) { const vis = [...$("files").querySelectorAll("li")].map((li) => +li.dataset.idx), p = vis.indexOf(S.idx), t = p < 0 ? vis[0] : vis[p + d]; if (t !== undefined) openFile(t); }
 async function reviewNext() {
-  if (!S.hasLabel && !S.region && !(await ask("비프 없음으로 검수", "구간을 지정하지 않았습니다. '비프 없음'으로 검수 완료할까요?", "검수 완료"))) return;
+  if (!S.region && !(await ask("비프 없음으로 검수", "비프 구간을 지정하지 않았습니다. 이 파일을 '비프 없음'으로 검수 완료할까요?", "검수 완료"))) return;
   S.hasLabel = true; S.reviewed = true; refreshPanels(); await save(); nextFile(1);
 }
 function toggleBig() { S.big = !S.big; $("wrap").classList.toggle("big", S.big); $("btn-big").textContent = S.big ? "스펙트로그램 작게 보기" : "스펙트로그램 크게 보기"; $("btn-big").classList.toggle("on", S.big); }
 window.addEventListener("keydown", async (ev) => {
   if ($("app").hidden || document.querySelector("dialog[open]") || ev.target.matches("input, textarea, select") || !S.view) return;
-  const k = ev.code, c = ev.ctrlKey || ev.metaKey, st = ev.shiftKey ? 10 : 1;
+  const k = ev.code, c = ev.ctrlKey || ev.metaKey, st = ev.shiftKey ? 100 : 10;
   if (c && k === "KeyS") { ev.preventDefault(); await save(); return; }
   if (c && k === "KeyZ") { ev.preventDefault(); ev.shiftKey ? redo() : undo(); return; }
   if (c && k === "KeyY") { ev.preventDefault(); redo(); return; }
   if (c || ev.altKey) return;
-  const m = { Space: playAll, Enter: playSeg, Escape: () => stop(), Delete: noBeep, Backspace: noBeep, KeyA: applyAuto,
+  const m = { Space: playAll, Enter: playSeg, Escape: () => stop(),
     BracketLeft: () => shift(0, -st), BracketRight: () => shift(0, st), Semicolon: () => shift(1, -st), Quote: () => shift(1, st),
     Equal: () => zoom(0.5), Minus: () => zoom(2), KeyF: () => setView(0, nS()), KeyB: toggleBig, KeyT: toggleTheme, KeyR: reviewNext,
     KeyN: () => nextFile(1), ArrowDown: () => nextFile(1), KeyP: () => nextFile(-1), ArrowUp: () => nextFile(-1),
@@ -1010,7 +1018,7 @@ function moveCursor(d) { const j = Math.max(0, Math.min(nF() - 1, frameAt(S.curs
 const on = (id, fn) => ($(id).onclick = () => { if (S.view) fn(); });
 on("btn-play-all", playAll); on("btn-play-seg", playSeg); $("btn-stop").onclick = () => stop();
 on("btn-zin", () => zoom(0.5)); on("btn-zout", () => zoom(2)); on("btn-fit", () => setView(0, nS())); $("btn-big").onclick = toggleBig;
-on("btn-auto", applyAuto); on("btn-nobeep", noBeep); on("btn-save", save); on("btn-review", reviewNext);
+on("btn-save", save); on("btn-review", reviewNext);
 $("gain").onchange = (e) => { S.gain = +e.target.value; draw(); };
 $("memo").oninput = () => { if (!S.view) return; S.memo = $("memo").value; S.hasLabel = true; scheduleSave(); };
 $("btn-help").onclick = () => $("dlg-help").showModal();
@@ -1034,7 +1042,7 @@ const ACTION_FILL = { "구간 지정": "DDEBF7", "구간 수정": "FFF2CC", "구
   "메모 작성": "EDE7F6", "메모 수정": "EDE7F6", "로그인": "F2F2F2", "로그아웃": "F2F2F2", "저장 후 로그아웃": "F2F2F2", "아이디 생성": "F2F2F2", "데이터 폴더 변경": "FFE699", "내보내기": "F2F2F2" };
 const STATUS_FILL = { "검수 완료": "E2EFDA", "작업 중": "FFF2CC", "일치": "E2EFDA", "불일치": "FCE4D6" };
 const RULE_ROWS = [
-  ["라벨 규칙", "샘플(파일)마다 비프 구간은 최대 1개이며 길이는 0~100 ms 입니다. 구간은 오디오를 자르지 않고 표시만 합니다. '비프 없음'은 해당 샘플에 비프가 없다고 작업자가 판단한 것입니다."],
+  ["라벨 규칙", "샘플(파일)마다 비프 구간은 최대 1개이며 길이 제한은 없습니다. 구간 경계는 10 ms 단위(소수 둘째 자리 초)로 기록합니다. 구간은 오디오를 자르지 않고 표시만 합니다. '비프 없음'은 해당 샘플에 비프가 없다고 작업자가 판단한 것입니다."],
   ["100ms 클립 구간", "표시한 구간의 중심을 기준으로 양옆 50 ms씩 잡은 100 ms 창입니다 (파일 끝에서는 안쪽으로 밀어서 100 ms 유지). 나중에 100 ms 샘플을 자를 때 사용합니다."],
   ["작업자 간 일치", "두 작업자 이상이 라벨링한 파일에서 시작·끝 경계 차이가 모두 20 ms 이하면 '일치'."],
   ["자동탐지", "협대역 톤 검출기가 찾은 첫 비프의 시작점부터 최대 100 ms. 사람이 검수한 결과가 정답입니다."],
