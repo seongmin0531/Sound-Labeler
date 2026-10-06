@@ -148,14 +148,17 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
     <div class="row"><div class="brand"><span class="lamp"></span>Beep Labeler</div><span class="spacer"></span>
       <button type="button" class="theme-btn" title="테마 전환">◐ 테마</button></div>
     <label for="lg-id">아이디<input id="lg-id" name="username" autocomplete="username" placeholder="예: hong" required></label>
+    <label for="lg-pw">비밀번호<input id="lg-pw" name="password" type="password" autocomplete="current-password" required></label>
     <div id="lg-new" hidden>
-      <p class="small">처음 보는 아이디입니다. <b id="lg-new-id"></b> 로 새로 시작할까요? <span class="muted">(오타라면 다시 입력하세요)</span></p>
+      <p class="small">처음 보는 아이디입니다. <b id="lg-new-id"></b> 로 새 아이디를 만들까요? <span class="muted">(오타라면 다시 입력하세요)</span></p>
+      <label for="lg-pw2">비밀번호 확인<input id="lg-pw2" type="password" autocomplete="new-password"></label>
       <label for="lg-name">이름 (표시용, 선택)<input id="lg-name" autocomplete="name"></label>
     </div>
     <div class="error" id="lg-error"></div>
     <button class="primary wide" id="lg-submit" type="submit">로그인</button>
-    <div class="note">기록은 <b>이 브라우저에만</b> 저장되고 어디에도 올라가지 않습니다. WAV 파일도 이 PC에서만 읽습니다.
-      같은 브라우저에서 같은 아이디로 로그인하면 이전 작업이 이어집니다.</div>
+    <div class="muted small" id="lg-db"></div>
+    <div class="note">라벨·메모·저장 기록은 <b>이 링크의 온라인 저장소에 아이디별로</b> 저장됩니다. 어느 PC에서든 같은 아이디·비밀번호로 로그인하면 이어서 작업할 수 있습니다.
+      WAV 오디오는 올라가지 않고 이 PC에서만 읽습니다. 공용 PC에서는 끝나고 꼭 로그아웃하세요.</div>
   </form>
 </div>
 
@@ -169,7 +172,7 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
     <span id="who"></span>
     <button class="theme-btn" title="테마 전환 (T)">◐ 테마</button>
     <button id="btn-export">엑셀/CSV 내보내기</button>
-    <button id="btn-backup">백업·초기화</button>
+    <button id="btn-backup">백업·초기화·계정</button>
     <button id="btn-help" title="단축키 (?)">?</button>
     <button id="btn-logout" class="primary">저장 후 로그아웃</button>
   </header>
@@ -252,14 +255,24 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
 </dialog>
 
 <dialog id="dlg-backup">
-  <h2>백업 · 초기화</h2>
-  <p class="small">기록은 이 브라우저에만 있어서, <b>브라우저 기록(사이트 데이터) 삭제, 시크릿 창, 다른 PC·브라우저</b>에서는 보이지 않습니다. 가끔 백업 파일을 받아 두세요.</p>
+  <h2>백업 · 초기화 · 계정</h2>
+  <p class="small">기록은 온라인 저장소에 아이디별로 있습니다. 혹시 모르니 가끔 백업 파일도 받아 두세요.</p>
   <div class="row"><button id="bk-save" class="primary" type="button">⬇ 내 기록 백업 (.json)</button>
     <label class="row small" for="bk-file">백업 불러오기: <input type="file" id="bk-file" accept=".json"></label></div>
+  <div class="row" style="margin-top:8px"><button id="bk-legacy" type="button">이 브라우저에 있던 예전 기록 가져오기</button>
+    <span class="muted small">온라인 저장으로 바뀌기 전에 이 브라우저에서 작업한 기록을 내 아이디로 옮깁니다.</span></div>
   <hr>
   <h2>처음 상태로 초기화</h2>
   <p class="small">폴더에서 처음 가져왔을 때처럼 <b>비프 구간 · 메모 · 상태 · 저장 기록</b>을 모두 지웁니다. 원본 WAV 파일은 바뀌지 않습니다. 되돌릴 수 없으니 필요하면 먼저 백업하세요.</p>
   <div class="row"><button id="rs-file" class="danger" type="button">이 파일 초기화</button><button id="rs-folder" class="danger" type="button">폴더 전체 초기화</button></div>
+  <hr>
+  <h2>비밀번호 변경</h2>
+  <div class="grid2">
+    <label for="pw-old" class="small muted">현재 비밀번호</label><input id="pw-old" type="password" autocomplete="current-password">
+    <label for="pw-new" class="small muted">새 비밀번호</label><input id="pw-new" type="password" autocomplete="new-password">
+    <label for="pw-new2" class="small muted">새 비밀번호 확인</label><input id="pw-new2" type="password" autocomplete="new-password">
+  </div>
+  <div class="row" style="margin-top:8px"><button id="pw-save" type="button">비밀번호 변경</button></div>
   <pre id="backup-result"></pre>
   <div class="row end"><button type="button" data-close>닫기</button></div>
 </dialog>
@@ -291,11 +304,11 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
 <script>
 "use strict";
 /* ============================================================================
-   Beep Labeler (web). Everything runs in this browser: WAV decoding, labels and
-   saved checkpoints (IndexedDB), Excel/CSV export, Excel merge, clip cutting.
-   Nothing is uploaded. Labels change only when the user presses 저장.
+   Beep Labeler (web). WAV decoding, Excel/CSV export, merge and clip cutting run in
+   this browser; audio is never uploaded. Labels and saved checkpoints are kept per app id
+   in this page's online store, so an id works from any PC. Labels change only on 저장.
    ========================================================================== */
-const VERSION = "web-0.7.0";
+const VERSION = "web-0.8.0";
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -320,54 +333,60 @@ function ask(title, text, yes = "확인", alt = null) {
 }
 document.querySelectorAll("dialog [data-close]").forEach((b) => (b.onclick = () => b.closest("dialog").close()));
 
-/* ============================== storage ============================== */
-const FRAME_MS = 100, AGREE_TOL_MS = 20;
-const Store = (() => {
-  let db = null, mem = null;
-  const open = () => new Promise((ok) => {
-    try {
-      const rq = indexedDB.open("beeplabel", 1);
-      rq.onupgradeneeded = () => {
-        const d = rq.result;
-        d.createObjectStore("users", { keyPath: "id" });
-        d.createObjectStore("labels", { keyPath: "key" }).createIndex("user", "user_id");
-        d.createObjectStore("audit", { keyPath: "id", autoIncrement: true }).createIndex("user", "user_id");
-        d.createObjectStore("auto", { keyPath: "key" });
-      };
-      rq.onsuccess = () => { db = rq.result; ok(true); };
-      rq.onerror = () => ok(false);
-      rq.onblocked = () => ok(false);
-    } catch (e) { ok(false); }
-  });
-  function memStore() { return { users: new Map(), labels: new Map(), audit: new Map(), auto: new Map(), seq: 1 }; }
-  const req = (r) => new Promise((ok, fail) => { r.onsuccess = () => ok(r.result); r.onerror = () => fail(r.error); });
-  const tx = (name, mode = "readonly") => db.transaction(name, mode).objectStore(name);
-  return {
-    async init() { const ok = await open(); if (!ok) mem = memStore(); try { navigator.storage?.persist?.(); } catch (e) {} return ok; },
-    get volatile() { return !!mem; },
-    async get(store, key) { if (mem) return mem[store].get(key) ?? null; return (await req(tx(store).get(key))) ?? null; },
-    async put(store, val) {
-      if (mem) { if (store === "audit" && val.id == null) val.id = mem.seq++; mem[store].set(val[store === "audit" ? "id" : "key"] ?? val.id, val); return val.id; }
-      return req(tx(store, "readwrite").put(val));
-    },
-    async byUser(store, uid) { if (mem) return [...mem[store].values()].filter((v) => v.user_id === uid); return req(tx(store).index("user").getAll(uid)); },
-    async del(store, key) { if (mem) { mem[store].delete(key); return; } return req(tx(store, "readwrite").delete(key)); },
-  };
-})();
-const lkey = (uid, folder, file) => `${uid}\u0001${folder}\u0001${file}`;
-const labelStatus = (l) => (l ? l.status || (l.reviewed ? "reviewed" : "draft") : "none");
-
-async function getUser(uid) { return Store.get("users", uid); }
-async function putUser(u) { u.key = u.id; await Store.put("users", u); }
-async function log(uid, action, { dataset = null, file = null, before = null, after = null, detail = null } = {}) {
-  await Store.put("audit", { ts: now(), user_id: uid, dataset, file, action, before, after, detail });
+/* ============================== online storage ============================== */
+// Records live in this page's shared online store, one tree per app id:
+//   accounts/{id}                                id, name, password hash (PBKDF2), prefs, account events
+//   ws/{id}/folders/{folderKey}                  folder name
+//   ws/{id}/folders/{folderKey}/files/{fileKey}  that file's saved label + its saved-checkpoint history
+// WAV audio never leaves the browser.
+const FRAME_MS = 100, AGREE_TOL_MS = 20, MAX_EVENTS = 500, MAX_FILE_HISTORY = 500, PBKDF2_ITER = 150000;
+let DB = null;
+const enc = new TextEncoder();
+const toHex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+const fromHex = (h) => new Uint8Array((h.match(/../g) || []).map((x) => parseInt(x, 16)));
+const keyOf = async (str) => toHex(await crypto.subtle.digest("SHA-256", enc.encode(str))).slice(0, 40);
+let idSeq = 0;   // ids sort in creation order (same-second events keep their order)
+const newId = () => Date.now().toString(36).padStart(9, "0") + (++idSeq % 1679616).toString(36).padStart(4, "0") + Math.random().toString(36).slice(2, 6);
+const plain = (d) => JSON.parse(JSON.stringify(d ?? null));   // snapshots are frozen
+const acctRef = (uid) => DB.doc(`accounts/${uid}`);
+const folderRef = async (uid, folder) => DB.doc(`ws/${uid}/folders/${await keyOf("folder:" + folder)}`);
+const fileRef = async (uid, folder, rel) => (await folderRef(uid, folder)).collection("files").doc(await keyOf("file:" + rel));
+async function retry(fn) { try { return await fn(); } catch (e) { if (e?.code !== "unavailable") throw e; await new Promise((r) => setTimeout(r, 400 + Math.random() * 600)); return fn(); } }
+function dbMsg(e) {
+  if (e?.code === "invalid_argument") return "온라인 저장 권한이 없습니다. 링크 소유자에게 '편집' 권한을 요청하세요.";
+  if (e?.code === "quota_exceeded") return "온라인 저장 공간이 가득 찼습니다. (" + (e.message || "") + ")";
+  if (e?.code === "revoked") return "이 링크의 접근 권한이 바뀌었습니다. 새로고침하세요.";
+  return "온라인 저장소 오류: " + (e?.message || e?.code || e);
 }
-async function myAudit(uid) { return (await Store.byUser("audit", uid)).sort((a, b) => a.id - b.id); }
+async function pwHash(pw, saltHex, iter = PBKDF2_ITER) {
+  const k = await crypto.subtle.importKey("raw", enc.encode(pw), "PBKDF2", false, ["deriveBits"]);
+  return toHex(await crypto.subtle.deriveBits({ name: "PBKDF2", salt: fromHex(saltHex), iterations: iter, hash: "SHA-256" }, k, 256));
+}
+const newSalt = () => toHex(crypto.getRandomValues(new Uint8Array(16)));
+const labelStatus = (l) => (l ? l.status || (l.reviewed ? "reviewed" : "draft") : "none");
+const fileDocs = new Map();   // rel -> {file, dataset, user_id, label, history} (current folder, me)
+
+async function getUser(uid) { const sn = await retry(() => acctRef(uid).get()); return sn.exists ? plain(sn.data()) : null; }
+async function putUser(u) { await retry(() => acctRef(u.id).set(plain(u))); }
+/** Account-level event (login, folder change, export…). File saves go into the file's own history. */
+async function log(uid, action, { dataset = null, file = null, before = null, after = null, detail = null } = {}) {
+  if (!S.me || S.me.id !== uid) return;
+  S.me.events = [...(S.me.events || []), { id: newId(), ts: now(), action, dataset, file, before, after, detail }].slice(-MAX_EVENTS);
+  try { await putUser(S.me); } catch (e) { toast(dbMsg(e)); }
+}
+async function loadDocs(folder) {
+  const out = new Map();
+  const sn = await retry(async () => (await folderRef(S.me.id, folder)).collection("files").get());
+  for (const d of sn.docs) { const x = plain(d.data()); if (x && x.file) out.set(x.file, x); }
+  return out;
+}
 
 /** Checkpoint save: writes the label and ONE history row listing what changed since the last save.
- *  Returns null when nothing changed. A file saved as 미작업 with no region and no memo is removed. */
+ *  Returns null when nothing changed. A file saved as 미작업 with no region and no memo keeps only its history. */
 async function commitLabel(uid, folder, file, f) {
-  const key = lkey(uid, folder, file), t = now(), old = await Store.get("labels", key);
+  const ref = await fileRef(uid, folder, file), sn = await retry(() => ref.get()), t = now();
+  const doc = sn.exists ? plain(sn.data()) : { file, dataset: folder, user_id: uid, label: null, history: [] };
+  const old = doc.label;
   const oldReg = old ? regionText(old.start_s, old.end_s).replace("비프 없음", "없음") : "없음";
   const newReg = regionText(f.start_s, f.end_s).replace("비프 없음", "없음");
   const oldSt = STATUS_NAME[labelStatus(old)], newSt = STATUS_NAME[f.status];
@@ -377,11 +396,11 @@ async function commitLabel(uid, folder, file, f) {
   if ((old?.memo || "") !== (f.memo || "")) { before.push(`메모: ${old?.memo || "(없음)"}`); after.push(`메모: ${f.memo || "(없음)"}`); what.push("메모"); }
   if (!what.length) return null;
   const empty = f.status === "none" && f.start_sample == null && !f.memo;
-  let rec = null;
-  if (empty) { if (old) await Store.del("labels", key); }
-  else { rec = { ...(old || { created_at: t }), key, dataset: folder, file, user_id: uid, ...f, reviewed: f.status === "reviewed" ? 1 : 0, updated_at: t }; await Store.put("labels", rec); }
-  await log(uid, "저장", { dataset: folder, file, before: before.join("\n"), after: after.join("\n"), detail: what.join("·") + " 변경" });
-  return { label: rec };
+  doc.label = empty ? null : { ...(old || { created_at: t }), dataset: folder, file, user_id: uid, ...f, reviewed: f.status === "reviewed" ? 1 : 0, updated_at: t };
+  doc.history = [...(doc.history || []), { id: newId(), ts: t, action: "저장", before: before.join("\n"), after: after.join("\n"), detail: what.join("·") + " 변경" }].slice(-MAX_FILE_HISTORY);
+  await retry(() => ref.set(doc));
+  fileDocs.set(file, doc);
+  return { label: doc.label };
 }
 
 /* ============================== audio ============================== */
@@ -512,34 +531,49 @@ document.querySelectorAll(".theme-btn").forEach((b) => (b.onclick = toggleTheme)
 matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { readColors(); draw(); });
 readColors();
 
-/* ============================== login ============================== */
-const ID_RE = /^[A-Za-z0-9_.\-]{2,32}$/;
+/* ============================== login (id + password, online accounts) ============================== */
+const ID_RE = /^[A-Za-z0-9_\-][A-Za-z0-9_.\-]{1,31}$/;
+function resetLoginForm() { $("lg-new").hidden = true; $("lg-submit").textContent = "로그인"; $("lg-error").textContent = ""; $("lg-pw").autocomplete = "current-password"; }
 function showLogin() {
   $("app").hidden = true; $("login").hidden = false; stop();
-  $("lg-new").hidden = true; $("lg-submit").textContent = "로그인"; $("lg-error").textContent = "";
+  resetLoginForm(); $("lg-pw").value = ""; $("lg-pw2").value = "";
   $("lg-id").focus();
 }
-$("lg-id").oninput = () => { $("lg-new").hidden = true; $("lg-submit").textContent = "로그인"; $("lg-error").textContent = ""; };
+$("lg-id").oninput = resetLoginForm;
 $("login-form").onsubmit = async (ev) => {
   ev.preventDefault();
-  const id = $("lg-id").value.trim();
-  if (!ID_RE.test(id)) { $("lg-error").textContent = "아이디는 영문/숫자/._- 2~32자로 입력하세요."; return; }
-  let u = await getUser(id);
-  if (!u) {
-    if ($("lg-new").hidden) { $("lg-new-id").textContent = id; $("lg-new").hidden = false; $("lg-submit").textContent = "새 아이디로 시작"; $("lg-name").focus(); return; }
-    u = { id, display_name: $("lg-name").value.trim().slice(0, 40) || id, created_at: now(), last_login: null, theme: null, last_file: null, folder_name: null };
-    await putUser(u); await log(id, "아이디 생성", { detail: u.display_name !== id ? u.display_name : null });
-  }
-  u.last_login = now(); await putUser(u); await log(id, "로그인");
-  try { localStorage.setItem("bl-session", id); } catch (e) {}
-  $("lg-name").value = "";
-  await startApp(u);
+  if (!DB) return;
+  const id = $("lg-id").value.trim(), pw = $("lg-pw").value, err = (m) => ($("lg-error").textContent = m);
+  if (!ID_RE.test(id)) return err("아이디는 영문/숫자/._- 2~32자로 입력하세요.");
+  if (!pw) return err("비밀번호를 입력하세요.");
+  $("lg-submit").disabled = true;
+  try {
+    let u = await getUser(id);
+    if (!u) {
+      if ($("lg-new").hidden) { $("lg-new-id").textContent = id; $("lg-new").hidden = false; $("lg-submit").textContent = "새 아이디 만들기"; $("lg-pw").autocomplete = "new-password"; $("lg-pw2").focus(); return; }
+      if (pw.length < 4) return err("비밀번호는 4자 이상으로 정하세요.");
+      if (pw !== $("lg-pw2").value) return err("비밀번호 확인이 일치하지 않습니다.");
+      const lease = await retry(() => acctRef(id).acquire({ holder: newId(), ttlMs: 5000 }));
+      if (!lease.acquired || (await getUser(id))) return err("방금 다른 사람이 같은 아이디를 만들었습니다. 다른 아이디를 쓰세요.");
+      const salt = newSalt();
+      u = { id, display_name: $("lg-name").value.trim().slice(0, 40) || id, created_at: now(), last_login: null, theme: null, last_file: null, folder_name: null,
+        salt, iter: PBKDF2_ITER, pw_hash: await pwHash(pw, salt), events: [] };
+      await putUser(u); S.me = u; await log(id, "아이디 생성", { detail: u.display_name !== id ? u.display_name : null });
+    } else if (!u.pw_hash || (await pwHash(pw, u.salt, u.iter || PBKDF2_ITER)) !== u.pw_hash) {
+      return err("아이디 또는 비밀번호가 올바르지 않습니다.");
+    }
+    S.me = u; u.last_login = now(); await log(id, "로그인");
+    try { sessionStorage.setItem("bl-session", id); } catch (e) {}
+    $("lg-name").value = ""; $("lg-pw").value = ""; $("lg-pw2").value = "";
+    await startApp(u);
+  } catch (e) { err(dbMsg(e)); }
+  finally { $("lg-submit").disabled = false; }
 };
 async function logout() {
   if (isDirty()) await save();                       // "저장 후 로그아웃"
   if (S.me) await log(S.me.id, "저장 후 로그아웃");
-  try { localStorage.removeItem("bl-session"); } catch (e) {}
-  S.me = null; S.view = null; S.idx = -1; S.files = []; S.folder = null; myLabels.clear();
+  try { sessionStorage.removeItem("bl-session"); } catch (e) {}
+  S.me = null; S.view = null; S.idx = -1; S.files = []; S.folder = null; myLabels.clear(); fileDocs.clear();
   showLogin();
 }
 $("btn-logout").onclick = logout;
@@ -552,7 +586,6 @@ async function startApp(u) {
   $("who").textContent = u.display_name === u.id ? u.id : `${u.display_name} (${u.id})`;
   $("last-folder").textContent = u.folder_name ? `지난번 폴더: ${u.folder_name}` : "";
   S.files = []; S.view = null; renderFiles(); resize(); showEmpty();
-  if (Store.volatile) toast("이 브라우저에서 저장소를 쓸 수 없어 기록이 저장되지 않습니다. 작업 후 꼭 엑셀로 내보내세요.");
 }
 function showEmpty(msg) {
   const e = $("empty"), has = !!S.view;
@@ -585,7 +618,10 @@ drop.ondrop = async (e) => {
   for (const it of items) await walk(it, "");
   if (await confirmLeave()) loadFolder(out);
 };
-async function reloadMyLabels() { myLabels.clear(); for (const l of await Store.byUser("labels", S.me.id)) if (l.dataset === S.folder) myLabels.set(l.file, l); }
+async function reloadMyLabels() {
+  const docs = await loadDocs(S.folder); fileDocs.clear(); myLabels.clear();
+  for (const [rel, d] of docs) { fileDocs.set(rel, d); if (d.label) myLabels.set(rel, d.label); }
+}
 async function loadFolder(entries) {
   stop();
   const wav = entries.filter((x) => /\.wav$/i.test(x.path));
@@ -598,7 +634,8 @@ async function loadFolder(entries) {
   S.folder = root; S.files = files; S.idx = -1; S.view = null; S.saved = null;
   if (prev !== root) { await log(S.me.id, "데이터 폴더 변경", { before: prev, after: root, detail: `WAV ${files.length}개` }); S.me.folder_name = root; await putUser(S.me); }
   if (prev && prev !== root) toast(`지난번 폴더(${prev})와 이름이 다릅니다. 기록은 폴더 이름별로 따로 저장됩니다.`);
-  await reloadMyLabels();
+  try { await reloadMyLabels(); await retry(async () => (await folderRef(S.me.id, root)).set({ folder: root, updated_at: now() })); }
+  catch (e) { toast(dbMsg(e)); }
   $("folder-label").textContent = `📁 ${root} (${files.length}개)`; $("last-folder").textContent = "";
   renderFiles(); showEmpty();
   const last = files.findIndex((f) => f.rel === S.me.last_file);
@@ -737,7 +774,7 @@ const setSave = (t, warn = false) => { $("save-state").textContent = t; $("save-
 async function loadHistory() {
   if (!S.view) return;
   const f = S.files[S.idx].rel;
-  S.history = (await myAudit(S.me.id)).filter((a) => a.dataset === S.folder && a.file === f).reverse();
+  S.history = [...(fileDocs.get(f)?.history || [])].reverse();
   renderHistory();
 }
 function renderHistory() {
@@ -762,11 +799,15 @@ $("btn-hist-all").onclick = () => {
   boxes.forEach((c) => (c.checked = !all)); histCount();
 };
 $("btn-hist-del").onclick = async () => {
-  const ids = [...$("history").querySelectorAll(".hc:checked")].map((c) => +c.value);
+  const ids = [...$("history").querySelectorAll(".hc:checked")].map((c) => c.value);
   if (!ids.length || !(await ask("저장 기록 삭제", `선택한 기록 ${ids.length}건을 삭제할까요?\n되돌릴 수 없고 엑셀·CSV에서도 빠집니다.\n(비프 구간·메모·상태는 바뀌지 않습니다)`, "삭제"))) return;
-  const mine = new Set(S.history.map((h) => h.id));
-  for (const id of ids) if (mine.has(id)) await Store.del("audit", id);
-  S.histEdit = false; toast(`기록 ${ids.length}건 삭제됨`); loadHistory();
+  const rel = S.files[S.idx].rel, doc = fileDocs.get(rel), drop = new Set(ids);
+  if (doc) {
+    const next = { ...doc, history: (doc.history || []).filter((h) => !drop.has(h.id)) };
+    try { await retry(async () => (await fileRef(S.me.id, S.folder, rel)).set(next)); fileDocs.set(rel, next); toast(`기록 ${ids.length}건 삭제됨`); }
+    catch (e) { toast(dbMsg(e)); }
+  }
+  S.histEdit = false; loadHistory();
 };
 
 /* ============================== open / save ============================== */
@@ -818,7 +859,7 @@ async function save() {
     if (r.label) myLabels.set(rel, r.label); else myLabels.delete(rel);
     if (S.view === V) { S.saved = stateJSON(); refreshPanels(); setSave(`저장됨 ${now()} (${S.me.id})`); loadHistory(); }
     renderFiles();
-  } catch (e) { setSave("저장 실패: " + e.message, true); }
+  } catch (e) { setSave("저장 실패: " + dbMsg(e), true); }
 }
 window.addEventListener("beforeunload", (e) => { if (isDirty()) { e.preventDefault(); e.returnValue = ""; } });
 
@@ -991,7 +1032,7 @@ const LABEL_HEADERS = ["번호", "파일", "작업자 ID", "작업자 이름", "
 const LABEL_KEYS = [null, "file", "user_id", "display_name", "status", null, "region", "start_s", "end_s", "duration_ms", "memo",
   "created_at", "updated_at", "sample_rate", "file_duration_s", "start_sample", "end_sample", "sha256"];
 const AUDIT_HEADERS = ["번호", "일시", "작업자 ID", "작업자 이름", "파일", "동작", "변경 전", "변경 후", "비고"], SOURCE = "출처 파일";
-const ACTION_FILL = { "저장": "DDEBF7", "로그인": "F2F2F2", "로그아웃": "F2F2F2", "저장 후 로그아웃": "F2F2F2", "아이디 생성": "F2F2F2", "데이터 폴더 변경": "FFE699", "내보내기": "F2F2F2", "엑셀 합치기": "F2F2F2", "초기화": "FCE4D6" };
+const ACTION_FILL = { "저장": "DDEBF7", "비밀번호 변경": "F2F2F2", "예전 기록 가져오기": "F2F2F2", "로그인": "F2F2F2", "로그아웃": "F2F2F2", "저장 후 로그아웃": "F2F2F2", "아이디 생성": "F2F2F2", "데이터 폴더 변경": "FFE699", "내보내기": "F2F2F2", "엑셀 합치기": "F2F2F2", "초기화": "FCE4D6" };
 const STATUS_FILL = { "검수 완료": "E2EFDA", "작업 중": "FFF2CC", "미작업": "F2F2F2", "일치": "E2EFDA", "불일치": "FCE4D6" };
 const RULE_ROWS = [
   ["라벨 규칙", "샘플(파일)마다 비프 구간은 최대 1개이며 길이 제한은 없습니다. 구간 경계는 10 ms 단위(소수 둘째 자리 초)로 기록합니다. 구간은 원본 오디오를 바꾸지 않고 표시만 합니다. 검수 완료인데 구간이 없으면 '비프 없음'입니다."],
@@ -1012,12 +1053,16 @@ function decorate(l0, name) {
 }
 async function collect(reviewedOnly) {
   const uid = S.me.id, folder = S.folder || S.me.folder_name;
-  let labels = (await Store.byUser("labels", uid)).filter((l) => l.dataset === folder);
+  const docs = folder === S.folder ? fileDocs : await loadDocs(folder);
+  let labels = [...docs.values()].filter((d) => d.label).map((d) => d.label);
   if (S.folder) { const have = new Set(S.files.map((f) => f.rel)); labels = labels.filter((l) => have.has(l.file)); }
   if (reviewedOnly) labels = labels.filter((l) => labelStatus(l) === "reviewed");
   labels.sort((a, b) => (a.file < b.file ? -1 : 1));
   const out = labels.map((l) => decorate(l, S.me.display_name));
-  const audit = (await myAudit(uid)).filter((a) => a.dataset === folder || a.dataset == null).map((a) => ({ ...a, display_name: S.me.display_name }));
+  const audit = [...(S.me.events || []).filter((a) => a.dataset == null || a.dataset === folder),
+    ...[...docs.values()].flatMap((d) => (d.history || []).map((h) => ({ ...h, dataset: d.dataset, file: d.file })))]
+    .map((a) => ({ ...a, user_id: uid, display_name: S.me.display_name }))
+    .sort((a, b) => (a.ts === b.ts ? (a.id < b.id ? -1 : 1) : a.ts < b.ts ? -1 : 1));
   const files = S.folder ? S.files.map((f) => [f.rel, f.info && !f.info.error ? Math.round(f.info.n / f.info.sr * 1000) / 1000 : null]) : out.map((l) => [l.file, l.file_duration_s]);
   return { folder, labels: out, audit, users: { [uid]: { display_name: S.me.display_name, created_at: S.me.created_at, last_login: S.me.last_login } }, files };
 }
@@ -1098,7 +1143,7 @@ async function doExport(kind) {
       for (const l of d.labels) { const fb = frameBounds(l.num_samples, l.sample_rate); fb.starts.forEach((s, i) => { const e = fb.ends[i], ov = l.has_beep ? Math.max(0, Math.min(e, l.end_sample) - Math.max(s, l.start_sample)) : 0; rows.push([l.file, l.user_id, l.status, i, r6(s / l.sample_rate), r6(e / l.sample_rate), Math.round(1000 * ov / l.sample_rate), ov > 0 ? 1 : 0, l.memo]); }); }
       ok = await saveFile(`beep_frames_${base}.csv`, toCsv(["file", "user_id", "status", "frame_index", "start_s", "end_s", "overlap_ms", "label", "memo"], rows));
     } else {
-      ok = await saveFile(`beep_audit_${base}.csv`, toCsv(["id", "timestamp", "user_id", "file", "action", "before", "after", "detail"], d.audit.map((a) => [a.id, a.ts, a.user_id, a.file, a.action, a.before, a.after, a.detail])));
+      ok = await saveFile(`beep_audit_${base}.csv`, toCsv(["no", "timestamp", "user_id", "file", "action", "before", "after", "detail"], d.audit.map((a, i) => [i + 1, a.ts, a.user_id, a.file, a.action, a.before, a.after, a.detail])));
     }
   } catch (e) { $("exp-error").textContent = "내보내기 실패: " + e.message; return; }
   if (ok) await log(S.me.id, "내보내기", { detail: `${kind} (검수 완료만: ${$("exp-reviewed").checked ? "예" : "아니오"})` });
@@ -1194,53 +1239,137 @@ $("merge-run").onclick = async () => {
   $("merge-run").disabled = false;
 };
 
-/* ============================== backup & reset ============================== */
+/* ============================== backup, import, reset, password ============================== */
 $("btn-backup").onclick = () => { $("backup-result").textContent = ""; $("rs-file").disabled = !S.view; $("rs-folder").disabled = !S.folder; $("dlg-backup").showModal(); };
 $("bk-save").onclick = async () => {
-  const data = { app: "beeplabel-web", version: VERSION, exported_at: now(), user: S.me, labels: await Store.byUser("labels", S.me.id), audit: await myAudit(S.me.id) };
-  if (await saveFile(`beeplabel_backup_${S.me.id}_${stamp()}.json`, JSON.stringify(data))) $("backup-result").textContent = `라벨 ${data.labels.length}개, 기록 ${data.audit.length}개를 백업했습니다.`;
+  try {
+    const fsn = await retry(() => DB.collection(`ws/${S.me.id}/folders`).get()), files = [];
+    for (const fd of fsn.docs) {
+      const sn = await retry(() => DB.doc(`ws/${S.me.id}/folders/${fd.id}`).collection("files").get());
+      for (const d of sn.docs) files.push(plain(d.data()));
+    }
+    const { pw_hash, salt, iter, ...pub } = S.me;
+    const data = { app: "beeplabel-web", format: 2, version: VERSION, exported_at: now(), user: { id: pub.id, display_name: pub.display_name, created_at: pub.created_at }, events: pub.events || [], files };
+    if (await saveFile(`beeplabel_backup_${S.me.id}_${stamp()}.json`, JSON.stringify(data))) $("backup-result").textContent = `파일 ${files.length}개의 라벨·기록을 백업했습니다.`;
+  } catch (e) { $("backup-result").textContent = "백업 실패: " + dbMsg(e); }
 };
+function legacyToFiles(d) {   // v0.5–0.7 browser backups / IndexedDB: labels + flat audit rows
+  const by = new Map(), events = [], key = (ds, f) => ds + "\u0001" + f;
+  for (const l of d.labels || []) { const { key: _k, ...rest } = l; rest.status = rest.status || (rest.reviewed ? "reviewed" : "draft"); by.set(key(l.dataset, l.file), { file: l.file, dataset: l.dataset, label: rest, history: [] }); }
+  for (const a of d.audit || []) {
+    const h = { id: "L" + a.id, ts: a.ts, action: a.action, before: a.before ?? null, after: a.after ?? null, detail: a.detail ?? null };
+    if (a.file && a.dataset != null) { const k = key(a.dataset, a.file); if (!by.has(k)) by.set(k, { file: a.file, dataset: a.dataset, label: null, history: [] }); by.get(k).history.push(h); }
+    else events.push({ ...h, dataset: a.dataset ?? null, file: null });
+  }
+  return { files: [...by.values()], events };
+}
+async function importRecords(d) {
+  const { files, events } = d.format === 2 ? { files: d.files || [], events: d.events || [] } : legacyToFiles(d);
+  const folders = new Set(); let n = 0;
+  for (const f of files) {
+    if (!f || !f.file || f.dataset == null) continue;
+    const ref = await fileRef(S.me.id, f.dataset, f.file), sn = await retry(() => ref.get()), c = sn.exists ? plain(sn.data()) : null;
+    const newer = f.label && (!c?.label || (f.label.updated_at || "") > (c.label.updated_at || ""));
+    const label = newer ? { ...f.label, user_id: S.me.id } : c?.label ?? null;
+    const seen = new Set((c?.history || []).map((h) => h.id));
+    const history = [...(c?.history || []), ...(f.history || []).filter((h) => !seen.has(h.id))].sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0)).slice(-MAX_FILE_HISTORY);
+    await retry(() => ref.set({ file: f.file, dataset: f.dataset, user_id: S.me.id, label, history }));
+    folders.add(f.dataset); n++;
+  }
+  for (const fo of folders) await retry(async () => (await folderRef(S.me.id, fo)).set({ folder: fo, updated_at: now() }));
+  const seenE = new Set((S.me.events || []).map((e) => e.id));
+  S.me.events = [...(S.me.events || []), ...events.filter((e) => !seenE.has(e.id))].sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0)).slice(-MAX_EVENTS);
+  await putUser(S.me);
+  if (S.folder) { await reloadMyLabels(); renderFiles(); if (S.idx >= 0) openFile(S.idx, true); }
+  return n;
+}
 $("bk-file").onchange = async () => {
   const f = $("bk-file").files[0]; $("bk-file").value = ""; if (!f) return;
   try {
     const d = JSON.parse(await f.text());
     if (d.app !== "beeplabel-web" || !d.user) throw new Error("Beep Labeler 백업 파일이 아닙니다");
     if (d.user.id !== S.me.id && (await ask("다른 아이디의 백업", `이 백업은 '${d.user.id}' 아이디의 기록입니다. 지금 아이디(${S.me.id})로 가져올까요?`, "가져오기")) !== "yes") return;
-    let nl = 0, na = 0;
-    for (const l of d.labels || []) { const key = lkey(S.me.id, l.dataset, l.file), o = await Store.get("labels", key); if (!o || (l.updated_at || "") > (o.updated_at || "")) { await Store.put("labels", { ...l, key, user_id: S.me.id }); nl++; } }
-    const have = new Set((await myAudit(S.me.id)).map((a) => [a.ts, a.action, a.file, a.before, a.after].join("\u0001")));
-    for (const a of d.audit || []) { const k = [a.ts, a.action, a.file, a.before, a.after].join("\u0001"); if (!have.has(k)) { const { id, ...rest } = a; await Store.put("audit", { ...rest, user_id: S.me.id }); na++; } }
-    $("backup-result").textContent = `불러오기 완료: 라벨 ${nl}개, 기록 ${na}개를 가져왔습니다.`;
-    if (S.folder) { await reloadMyLabels(); renderFiles(); if (S.idx >= 0) openFile(S.idx, true); }
-  } catch (e) { $("backup-result").textContent = "불러오기 실패: " + e.message; }
+    $("backup-result").textContent = "가져오는 중…";
+    $("backup-result").textContent = `불러오기 완료: 파일 ${await importRecords(d)}개의 라벨·기록을 가져왔습니다.`;
+  } catch (e) { $("backup-result").textContent = "불러오기 실패: " + (e?.code ? dbMsg(e) : e.message); }
+};
+/** Records this browser kept locally before online storage (IndexedDB "beeplabel"). Never creates or deletes it. */
+function readLegacyIDB() {
+  return new Promise((ok) => {
+    try {
+      const rq = indexedDB.open("beeplabel");
+      rq.onupgradeneeded = () => { rq.transaction.abort(); ok(null); };
+      rq.onerror = () => ok(null);
+      rq.onsuccess = async () => {
+        const d = rq.result;
+        if (!d.objectStoreNames.contains("labels")) { d.close(); return ok(null); }
+        const all = (name) => new Promise((r) => { try { const q = d.transaction(name).objectStore(name).getAll(); q.onsuccess = () => r(q.result || []); q.onerror = () => r([]); } catch (e) { r([]); } });
+        const out = { users: await all("users"), labels: await all("labels"), audit: await all("audit") };
+        d.close(); ok(out);
+      };
+    } catch (e) { ok(null); }
+  });
+}
+$("bk-legacy").onclick = async () => {
+  const old = await readLegacyIDB();
+  if (!old || (!old.labels.length && !old.audit.length)) { $("backup-result").textContent = "이 브라우저에는 예전 기록이 없습니다."; return; }
+  const mine = { labels: old.labels.filter((l) => l.user_id === S.me.id), audit: old.audit.filter((a) => a.user_id === S.me.id) };
+  if (!mine.labels.length && !mine.audit.length) {
+    const ids = [...new Set([...old.labels, ...old.audit].map((x) => x.user_id))].join(", ");
+    $("backup-result").textContent = `이 브라우저의 예전 기록은 '${ids}' 아이디의 것입니다. 그 아이디로 로그인해서 가져오세요.`; return;
+  }
+  if ((await ask("예전 기록 가져오기", `이 브라우저에 있던 '${S.me.id}' 아이디의 라벨 ${mine.labels.length}개, 기록 ${mine.audit.length}개를 온라인 저장소로 옮길까요?\n(이미 온라인에 있는 기록은 그대로 두고 합칩니다)`, "가져오기")) !== "yes") return;
+  try {
+    $("backup-result").textContent = "가져오는 중…";
+    const n = await importRecords(mine);
+    await log(S.me.id, "예전 기록 가져오기", { detail: `라벨 ${mine.labels.length}개, 기록 ${mine.audit.length}개` });
+    $("backup-result").textContent = `가져오기 완료: 파일 ${n}개의 라벨·기록을 옮겼습니다.`;
+  } catch (e) { $("backup-result").textContent = "가져오기 실패: " + dbMsg(e); }
 };
 /** Reset to the state right after the folder was loaded: labels and saved history go away. */
 async function resetFiles(rels) {
   const set = new Set(rels);
-  for (const rel of rels) await Store.del("labels", lkey(S.me.id, S.folder, rel));
-  for (const a of await myAudit(S.me.id)) if (a.dataset === S.folder && a.file && set.has(a.file)) await Store.del("audit", a.id);
+  try { for (const rel of rels) if (fileDocs.has(rel)) await retry(async () => (await fileRef(S.me.id, S.folder, rel)).delete()); }
+  catch (e) { $("backup-result").textContent = "초기화 실패: " + dbMsg(e); return false; }
   await log(S.me.id, "초기화", { dataset: S.folder, detail: rels.length === 1 ? rels[0] : `폴더 전체 ${rels.length}개 파일` });
   await reloadMyLabels(); renderFiles();
   if (S.view && set.has(S.files[S.idx].rel)) { applySaved(null); S.undo = []; S.redo = []; refreshPanels(); draw(); setSave("처음 상태로 초기화했습니다"); loadHistory(); }
+  return true;
 }
 $("rs-file").onclick = async () => {
   if (!S.view) return;
   const rel = S.files[S.idx].rel;
   if ((await ask("이 파일 초기화", `${rel}\n비프 구간 · 메모 · 상태 · 저장 기록을 모두 지우고 처음 상태로 되돌립니다.\n되돌릴 수 없습니다.`, "초기화")) !== "yes") return;
-  await resetFiles([rel]); $("backup-result").textContent = `${rel} 을(를) 처음 상태로 되돌렸습니다.`;
+  if (await resetFiles([rel])) $("backup-result").textContent = `${rel} 을(를) 처음 상태로 되돌렸습니다.`;
 };
 $("rs-folder").onclick = async () => {
   if (!S.folder) return;
-  const rels = S.files.map((f) => f.rel);
-  if ((await ask("폴더 전체 초기화", `${S.folder} 폴더의 파일 ${rels.length}개에 대해\n비프 구간 · 메모 · 상태 · 저장 기록을 모두 지웁니다.\n되돌릴 수 없으니 필요하면 먼저 백업하세요.`, "전체 초기화")) !== "yes") return;
-  await resetFiles(rels); $("backup-result").textContent = `${S.folder} 폴더 전체를 처음 상태로 되돌렸습니다.`;
+  const rels = [...new Set([...S.files.map((f) => f.rel), ...fileDocs.keys()])];
+  if ((await ask("폴더 전체 초기화", `${S.folder} 폴더의 파일 ${S.files.length}개에 대해\n비프 구간 · 메모 · 상태 · 저장 기록을 모두 지웁니다.\n되돌릴 수 없으니 필요하면 먼저 백업하세요.`, "전체 초기화")) !== "yes") return;
+  if (await resetFiles(rels)) $("backup-result").textContent = `${S.folder} 폴더 전체를 처음 상태로 되돌렸습니다.`;
+};
+$("pw-save").onclick = async () => {
+  const o = $("pw-old").value, n1 = $("pw-new").value, n2 = $("pw-new2").value, msg = (m) => ($("backup-result").textContent = m);
+  if ((await pwHash(o, S.me.salt, S.me.iter || PBKDF2_ITER)) !== S.me.pw_hash) return msg("현재 비밀번호가 올바르지 않습니다.");
+  if (n1.length < 4) return msg("새 비밀번호는 4자 이상으로 정하세요.");
+  if (n1 !== n2) return msg("새 비밀번호 확인이 일치하지 않습니다.");
+  try { S.me.salt = newSalt(); S.me.iter = PBKDF2_ITER; S.me.pw_hash = await pwHash(n1, S.me.salt); await log(S.me.id, "비밀번호 변경"); }
+  catch (e) { return msg("변경 실패: " + dbMsg(e)); }
+  $("pw-old").value = $("pw-new").value = $("pw-new2").value = ""; msg("비밀번호를 바꿨습니다.");
 };
 
 /* ============================== boot ============================== */
-(async () => {
-  await Store.init();
-  let sid = null; try { sid = localStorage.getItem("bl-session"); } catch (e) {}
-  const u = sid ? await getUser(sid) : null;
-  if (u) startApp(u); else showLogin();
-})();
+async function boot(db) {
+  DB = db;
+  if (!DB) {
+    $("lg-db").innerHTML = `<span style="color:var(--warn)">온라인 저장소에 연결할 수 없습니다.</span> claude.ai에 로그인했는지, 이 링크를 '편집'할 수 있게 공유받았는지 확인한 뒤 새로고침하세요.`;
+    $("lg-submit").disabled = true; showLogin(); return;
+  }
+  $("lg-db").textContent = ""; $("lg-submit").disabled = false;
+  let sid = null; try { sid = sessionStorage.getItem("bl-session"); } catch (e) {}
+  const u = sid ? await getUser(sid).catch(() => null) : null;
+  if (u) { S.me = u; startApp(u); } else showLogin();
+}
+$("lg-db").textContent = "온라인 저장소에 연결하는 중…"; $("lg-submit").disabled = true;
+(async () => { boot(window.claude?.use ? await window.claude.use("db").catch(() => null) : null); })();
 </script>
