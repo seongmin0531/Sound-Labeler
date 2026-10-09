@@ -140,6 +140,26 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
 #history .chg { color: var(--muted); font-size: 12px; }
 #history .chg.to { color: var(--fg); }
 #clip-result { white-space: pre-wrap; font: 12px var(--mono); margin: 8px 0 0; }
+
+/* work spaces, members, region chips */
+.ws { display: grid; gap: 6px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+#proj-members { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 12px; }
+#proj-members li, ul.plain li { display: flex; gap: 8px; align-items: flex-start; }
+ul.plain { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
+ul.plain li { align-items: center; }
+.swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; margin-top: 3px; display: inline-block; vertical-align: -1px; margin-right: 4px; }
+.badge { display: inline-block; color: #fff; border-radius: 999px; padding: 0 7px; font-size: 11px; margin-right: 4px; }
+.live { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .live { animation: none; } }
+#region-bar { flex-direction: column; align-items: stretch; gap: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 2px 4px 2px 10px; font: 12px var(--mono); cursor: pointer; background: var(--surface); }
+.chip.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.chip .x { border: 0; background: transparent; padding: 0 6px; font-size: 14px; line-height: 1; }
+table.assign { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.assign th, table.assign td { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: left; }
+table.assign input[type=number] { width: 80px; }
 </style>
 
 <!-- ================= login ================= -->
@@ -178,12 +198,21 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
   </header>
   <div id="layout">
     <aside id="side">
+      <div class="ws">
+        <label for="ws-select" class="small muted">작업 공간</label>
+        <select id="ws-select"></select>
+        <div id="proj-panel" hidden>
+          <ul id="proj-members"></ul>
+          <div class="row" id="proj-owner-tools" hidden><button id="btn-invite" type="button">참여자 초대</button><button id="btn-assign" type="button">작업 배정</button></div>
+        </div>
+        <button id="btn-new-proj" class="small-btn" type="button">＋ 공동 작업 만들기</button>
+      </div>
       <button id="btn-folder" class="primary">📁 WAV 폴더 선택</button>
       <input type="file" id="folder-input" webkitdirectory directory multiple hidden>
       <div class="drop" id="drop">여기에 WAV 폴더를 끌어다 놓아도 됩니다<br><span id="last-folder"></span></div>
       <input id="filter" placeholder="파일 검색…" aria-label="파일 검색">
       <select id="status-filter" aria-label="상태 필터">
-        <option value="">전체 파일</option><option value="none">미작업</option>
+        <option value="">전체 파일</option><option value="mine">내 담당만</option><option value="none">미작업</option>
         <option value="draft">작업 중</option><option value="reviewed">검수 완료</option>
       </select>
       <ul id="files"></ul>
@@ -197,6 +226,7 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
       </div>
       <div id="title-row">
         <span id="file-title">—</span>
+        <span id="file-owner" class="small"></span>
         <div class="seg" id="status-seg" role="group" aria-label="작업 상태">
           <button type="button" data-st="none">미작업</button><button type="button" data-st="draft">작업 중</button><button type="button" data-st="reviewed">검수 완료</button>
         </div>
@@ -205,11 +235,11 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
       <div id="empty" class="note" hidden></div>
       <div id="wrap"><canvas id="cv"></canvas></div>
       <div id="region-bar">
-        <div><span class="muted">비프 구간</span> <span id="region-text">—</span></div>
-        <div id="region-detail" class="muted small num"></div>
-        <button id="btn-cut" type="button" title="주황색 구간의 오디오를 잘라 WAV로 저장">✂ 구간 잘라 저장</button>
-        <span class="spacer"></span>
-        <div class="muted small"><b>드래그</b>: 원하는 길이로 구간 지정 · <b>클릭</b>: 클릭 지점 ±50 ms · 10 ms 단위 · 파일당 1구간</div>
+        <div class="row"><span class="muted">비프 구간</span> <span id="region-text">—</span>
+          <button id="btn-del-region" type="button" title="Delete">선택 구간 삭제</button>
+          <button id="btn-cut" type="button" title="이 파일의 구간 오디오를 잘라 WAV로 저장">✂ 구간 잘라 저장</button></div>
+        <div id="regions" class="chips"></div>
+        <div class="muted small"><b>드래그</b>: 구간 추가 · <b>클릭</b>: 클릭 지점 ±50 ms 구간 추가 · 구간 클릭: 선택 · <b>Tab</b>: 다음 구간 · <b>Delete</b>: 선택 구간 삭제 · 10 ms 단위</div>
       </div>
       <div id="status"></div>
     </main>
@@ -217,7 +247,8 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
       <h3>메모 (데이터 특징)</h3>
       <textarea id="memo" rows="4" placeholder="예: 비프 2회 반복, 배경에 음악, 창문 열림…" aria-label="메모"></textarea>
       <div class="muted small">저장 버튼을 누르면 기록되고, 엑셀·CSV의 memo 열에 들어갑니다.</div>
-      <h3>이 파일에서 내가 저장한 기록 <button id="btn-hist-edit" class="hist-btn" type="button">이력 정리</button></h3>
+      <h3>이 파일의 저장 기록 <button id="btn-hist-edit" class="hist-btn" type="button">이력 정리</button></h3>
+      <div class="row" style="margin-bottom:6px"><button id="btn-undo-save" type="button" title="마지막 저장을 취소하고 그 전 상태로 되돌립니다 (그 저장 기록도 지워짐)">↶ 마지막 저장 취소</button></div>
       <div class="muted small" style="margin-bottom:6px">💾 저장을 누를 때마다 그때까지 바뀐 내용이 한 줄로 남습니다.</div>
       <div id="hist-tools" hidden>
         <span class="muted small">지울 기록을 체크하세요 (라벨은 그대로 두고 기록만 지웁니다)</span>
@@ -234,14 +265,14 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
 
 <dialog id="dlg-export">
   <h2>내보내기</h2>
-  <p class="muted small">로그인한 아이디가 <b>저장한</b> 라벨, 저장 기록, 메모가 들어갑니다. 팀원과 비교하려면 각자 받은 엑셀을 아래에서 합치세요.</p>
-  <label class="row small" for="exp-reviewed"><input type="checkbox" id="exp-reviewed"> 검수 완료된 라벨만</label>
+  <p class="muted small" id="exp-scope"></p>
+  <label class="row small" for="exp-reviewed"><input type="checkbox" id="exp-reviewed"> 검수 완료된 파일만</label>
   <div class="grid2" style="margin-top:10px">
     <button id="exp-xlsx" class="primary" type="button">📊 엑셀 (.xlsx)</button><span class="muted small">라벨 결과 · 작업 이력 · 작업자 요약 · 파일 현황 · 정보</span>
-    <button id="exp-labels" type="button">labels.csv</button><span class="muted small">파일별 비프 구간(초) + 상태 + 메모</span>
+    <button id="exp-labels" type="button">labels.csv</button><span class="muted small">파일별 한 줄: 담당자 · 상태 · 구간 수 · 구간 목록 · 메모</span>
     <button id="exp-frames" type="button">frames.csv</button><span class="muted small">100 ms 칸별 overlap_ms, label</span>
     <button id="exp-audit" type="button">audit.csv</button><span class="muted small">저장 기록</span>
-    <button id="exp-clips" type="button">✂ 구간 오디오 (.zip)</button><span class="muted small">비프 구간을 지정한 모든 파일의 구간을 잘라 WAV로 묶음 (폴더를 열어 둔 상태에서)</span>
+    <button id="exp-clips" type="button">✂ 구간 오디오 (.zip)</button><span class="muted small">저장된 모든 구간을 잘라 WAV로 묶음 (폴더를 열어 둔 상태에서)</span>
   </div>
   <pre id="clip-result"></pre>
   <hr>
@@ -256,14 +287,14 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
 
 <dialog id="dlg-backup">
   <h2>백업 · 초기화 · 계정</h2>
-  <p class="small">기록은 온라인 저장소에 아이디별로 있습니다. 혹시 모르니 가끔 백업 파일도 받아 두세요.</p>
-  <div class="row"><button id="bk-save" class="primary" type="button">⬇ 내 기록 백업 (.json)</button>
+  <p class="small">개인 작업 기록은 온라인 저장소에 아이디별로 있습니다. 혹시 모르니 가끔 백업 파일도 받아 두세요. (공동 작업 기록은 공동 작업 공간에 따로 있습니다)</p>
+  <div class="row"><button id="bk-save" class="primary" type="button">⬇ 내 개인 기록 백업 (.json)</button>
     <label class="row small" for="bk-file">백업 불러오기: <input type="file" id="bk-file" accept=".json"></label></div>
   <div class="row" style="margin-top:8px"><button id="bk-legacy" type="button">이 브라우저에 있던 예전 기록 가져오기</button>
     <span class="muted small">온라인 저장으로 바뀌기 전에 이 브라우저에서 작업한 기록을 내 아이디로 옮깁니다.</span></div>
   <hr>
   <h2>처음 상태로 초기화</h2>
-  <p class="small">폴더에서 처음 가져왔을 때처럼 <b>비프 구간 · 메모 · 상태 · 저장 기록</b>을 모두 지웁니다. 원본 WAV 파일은 바뀌지 않습니다. 되돌릴 수 없으니 필요하면 먼저 백업하세요.</p>
+  <p class="small" id="rs-note">폴더에서 처음 가져왔을 때처럼 <b>비프 구간 · 메모 · 상태 · 저장 기록</b>을 모두 지웁니다. 원본 WAV 파일은 바뀌지 않습니다. 되돌릴 수 없습니다.</p>
   <div class="row"><button id="rs-file" class="danger" type="button">이 파일 초기화</button><button id="rs-folder" class="danger" type="button">폴더 전체 초기화</button></div>
   <hr>
   <h2>비밀번호 변경</h2>
@@ -277,24 +308,55 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
   <div class="row end"><button type="button" data-close>닫기</button></div>
 </dialog>
 
+<dialog id="dlg-proj-new">
+  <h2>공동 작업 만들기</h2>
+  <p class="small">지금 열어 둔 WAV 폴더의 파일 목록으로 공동 작업 공간을 만듭니다. 내가 방장이 되고, 참여자를 아이디로 초대해 파일 번호 범위를 나눠 줄 수 있습니다. 참여자는 각자 PC에서 <b>같은 폴더(같은 파일 구조)</b>를 열면 됩니다.</p>
+  <label class="block small muted" for="pn-name">공동 작업 이름<input id="pn-name"></label>
+  <label class="block small muted" for="pn-ids">초대할 아이디 (쉼표로 구분, 나중에 추가 가능)<input id="pn-ids" placeholder="예: kim, lee, park"></label>
+  <label class="row small" for="pn-copy"><input type="checkbox" id="pn-copy" checked> 이 폴더에서 내가 개인으로 작업한 라벨을 공동 작업으로 복사</label>
+  <div class="error" id="pn-error"></div>
+  <div class="row end"><button type="button" data-close>취소</button><button id="pn-create" class="primary" type="button">만들기</button></div>
+</dialog>
+
+<dialog id="dlg-invite">
+  <h2>참여자</h2>
+  <ul id="inv-list" class="plain"></ul>
+  <div class="row"><input id="inv-id" placeholder="초대할 아이디" aria-label="초대할 아이디"><button id="inv-add" class="primary" type="button">초대</button></div>
+  <p class="muted small">상대가 먼저 이 링크에서 아이디를 만들어 둬야 초대할 수 있습니다. 초대받은 사람은 왼쪽 위 '작업 공간'에서 이 공동 작업을 고르면 됩니다.</p>
+  <div class="error" id="inv-error"></div>
+  <div class="row end"><button type="button" data-close>닫기</button></div>
+</dialog>
+
+<dialog id="dlg-assign">
+  <h2>작업 배정</h2>
+  <p class="small">파일 번호(1 ~ <span id="as-n"></span>) 범위를 사람마다 정합니다. 담당 파일은 그 사람 색으로 표시됩니다. 비워 두면 배정 안 됨.</p>
+  <table class="assign"><thead><tr><th>포함</th><th>작업자</th><th>시작 번호</th><th>끝 번호</th><th>파일 수</th></tr></thead><tbody id="as-rows"></tbody></table>
+  <div class="row" style="margin-top:8px"><button id="as-even" type="button">체크한 사람끼리 균등 분배</button><button id="as-clear" type="button">모두 비우기</button>
+    <span class="spacer"></span><button id="as-relist" type="button" title="지금 열어 둔 폴더의 파일 목록으로 번호를 다시 매깁니다">현재 폴더로 파일 목록 갱신</button></div>
+  <div class="error" id="as-error"></div>
+  <div class="row end"><button type="button" data-close>취소</button><button id="as-save" class="primary" type="button">배정 저장</button></div>
+</dialog>
+
 <dialog id="dlg-help">
   <h2>사용법 · 단축키</h2>
   <table class="keys">
-    <tr><td>드래그</td><td>비프 구간 지정 (길이 제한 없음, 10 ms 단위, 파일당 1구간)</td></tr>
-    <tr><td>클릭</td><td>클릭 지점 중심 ±50 ms, 100 ms 구간 선택</td></tr>
-    <tr><td>가장자리 드래그</td><td>시작/끝 조정 (10 ms 단위)</td></tr>
-    <tr><td>구간 안 드래그</td><td>구간 이동</td></tr>
-    <tr><td>Space / Enter</td><td>전체 듣기(처음부터 끝까지) / 구간만 듣기</td></tr>
+    <tr><td>드래그</td><td>비프 구간 추가 (길이 제한 없음, 10 ms 단위, 여러 개 가능 · 겹치면 합쳐짐)</td></tr>
+    <tr><td>클릭</td><td>클릭 지점 중심 ±50 ms, 100 ms 구간 추가</td></tr>
+    <tr><td>구간 클릭 / 안에서 드래그</td><td>선택 / 이동</td></tr>
+    <tr><td>가장자리 드래그</td><td>시작·끝 조정</td></tr>
+    <tr><td>Tab / Shift+Tab</td><td>다음 / 이전 구간 선택</td></tr>
+    <tr><td>Delete, Backspace</td><td>선택한 구간 삭제</td></tr>
+    <tr><td>[ ]  ; '</td><td>선택 구간 시작 / 끝 ∓10 ms (Shift: 100 ms)</td></tr>
+    <tr><td>Space / Enter</td><td>전체 듣기(처음부터) / 선택 구간만 듣기</td></tr>
     <tr><td>Esc</td><td>정지</td></tr>
-    <tr><td>[ ]  ; '</td><td>구간 시작 / 끝 ∓10 ms (Shift: 100 ms)</td></tr>
     <tr><td>휠, Shift+휠</td><td>확대·축소, 좌우 이동</td></tr>
     <tr><td>= - F B T</td><td>확대 / 축소 / 전체 보기 / 스펙트로그램 크게 / 테마</td></tr>
     <tr><td>Ctrl+S</td><td>저장 (저장할 때만 기록이 남습니다)</td></tr>
+    <tr><td>Ctrl+Z / Ctrl+Shift+Z</td><td>저장 전 편집 되돌리기 / 다시</td></tr>
     <tr><td>R</td><td>검수 완료로 저장 + 다음 파일</td></tr>
     <tr><td>N P (↓ ↑)</td><td>다음 / 이전 파일</td></tr>
-    <tr><td>Ctrl+Z</td><td>구간 실행 취소</td></tr>
   </table>
-  <p class="muted small">상태(미작업 · 작업 중 · 검수 완료)는 파일 이름 옆 버튼으로 언제든 바꾸고 저장하면 됩니다. 브라우저는 보안상 폴더 위치를 기억할 수 없어서, 다시 로그인하면 같은 WAV 폴더를 한 번 다시 선택해야 합니다. 크롬 또는 엣지를 권장합니다.</p>
+  <p class="muted small">↶ 마지막 저장 취소: 저장을 하나씩 되돌리고 그 저장 기록도 지웁니다. 공동 작업에서는 담당 파일이 작업자 색으로, 지금 누가 어느 파일을 보고 있는지가 실시간으로 표시됩니다.</p>
   <div class="row end"><button type="button" data-close>닫기</button></div>
 </dialog>
 <div id="toast" hidden></div>
@@ -304,11 +366,12 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
 <script>
 "use strict";
 /* ============================================================================
-   Beep Labeler (web). WAV decoding, Excel/CSV export, merge and clip cutting run in
-   this browser; audio is never uploaded. Labels and saved checkpoints are kept per app id
-   in this page's online store, so an id works from any PC. Labels change only on 저장.
+   Beep Labeler (web). WAV decoding, export, merge and clip cutting run in this browser;
+   audio is never uploaded. Labels (several beep regions per file) and saved checkpoints
+   live in this page's online store: per app id ("개인 작업") or per shared project
+   ("공동 작업", live updates, owner assigns file ranges). Labels change only on 저장.
    ========================================================================== */
-const VERSION = "web-0.8.0";
+const VERSION = "web-0.9.0";
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -316,11 +379,12 @@ function now() { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMo
 const stamp = () => { const d = new Date(); return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}_${pad2(d.getHours())}${pad2(d.getMinutes())}`; };
 const r6 = (x) => Math.round(x * 1e6) / 1e6;
 const fl2 = (x) => (Math.floor(x * 100 + 1e-6) / 100).toFixed(2);           // 1.245 s -> "1.24"
-const regionText = (s, e) => (s == null ? "비프 없음" : `${fl2(s)}~${fl2(e)}초`);
 const rint = (x) => { const f = Math.floor(x), d = x - f; return d > 0.5 ? f + 1 : d < 0.5 ? f : (f % 2 === 0 ? f : f + 1); }; // numpy-style round-half-even
 const STATUS_NAME = { none: "미작업", draft: "작업 중", reviewed: "검수 완료" };
+const COLORS = ["#2f7fe0", "#e0499a", "#22a35a", "#e08a1a", "#8b5cf6", "#0ea5a4", "#d64545", "#7a6a2f", "#5b6bd6", "#c2410c"];
+const regionsText = (rs, sep = ", ") => (rs && rs.length ? rs.map((r) => `${fl2(r.start_s)}~${fl2(r.end_s)}초`).join(sep) : "없음");
 let toastT;
-function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 3200); }
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 3600); }
 /** In-page confirm (the viewer blocks window.confirm). Resolves "yes", "alt" or false. */
 function ask(title, text, yes = "확인", alt = null) {
   return new Promise((ok) => {
@@ -334,12 +398,13 @@ function ask(title, text, yes = "확인", alt = null) {
 document.querySelectorAll("dialog [data-close]").forEach((b) => (b.onclick = () => b.closest("dialog").close()));
 
 /* ============================== online storage ============================== */
-// Records live in this page's shared online store, one tree per app id:
-//   accounts/{id}                                id, name, password hash (PBKDF2), prefs, account events
-//   ws/{id}/folders/{folderKey}                  folder name
-//   ws/{id}/folders/{folderKey}/files/{fileKey}  that file's saved label + its saved-checkpoint history
-// WAV audio never leaves the browser.
-const FRAME_MS = 100, AGREE_TOL_MS = 20, MAX_EVENTS = 500, MAX_FILE_HISTORY = 500, PBKDF2_ITER = 150000;
+// accounts/{id}                                  id, name, password hash (PBKDF2), prefs, account events
+// ws/{id}/folders/{folderKey}/files/{fileKey}     personal: a file's saved label + its saved-checkpoint history
+// projects/{pid}                                  shared project: owner, members, names, colors, ranges, events
+// projects/{pid}/meta/files                       numbered file list of the project
+// projects/{pid}/files/{fileKey}                  the file's shared label + history (anyone in the project may edit)
+// projects/{pid}/presence/{id}                    which file each member has open right now
+const FRAME_MS = 100, AGREE_TOL_MS = 20, MAX_EVENTS = 500, MAX_FILE_HISTORY = 300, PBKDF2_ITER = 150000, PRESENCE_FRESH_MS = 15 * 60 * 1000;
 let DB = null;
 const enc = new TextEncoder();
 const toHex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -350,7 +415,6 @@ const newId = () => Date.now().toString(36).padStart(9, "0") + (++idSeq % 167961
 const plain = (d) => JSON.parse(JSON.stringify(d ?? null));   // snapshots are frozen
 const acctRef = (uid) => DB.doc(`accounts/${uid}`);
 const folderRef = async (uid, folder) => DB.doc(`ws/${uid}/folders/${await keyOf("folder:" + folder)}`);
-const fileRef = async (uid, folder, rel) => (await folderRef(uid, folder)).collection("files").doc(await keyOf("file:" + rel));
 async function retry(fn) { try { return await fn(); } catch (e) { if (e?.code !== "unavailable") throw e; await new Promise((r) => setTimeout(r, 400 + Math.random() * 600)); return fn(); } }
 function dbMsg(e) {
   if (e?.code === "invalid_argument") return "온라인 저장 권한이 없습니다. 링크 소유자에게 '편집' 권한을 요청하세요.";
@@ -364,7 +428,24 @@ async function pwHash(pw, saltHex, iter = PBKDF2_ITER) {
 }
 const newSalt = () => toHex(crypto.getRandomValues(new Uint8Array(16)));
 const labelStatus = (l) => (l ? l.status || (l.reviewed ? "reviewed" : "draft") : "none");
-const fileDocs = new Map();   // rel -> {file, dataset, user_id, label, history} (current folder, me)
+/** Older labels had one region (start_sample/end_sample); now `regions` is a list. */
+function normLabel(l) {
+  if (!l) return null;
+  l = { ...l };
+  if (!Array.isArray(l.regions)) l.regions = l.start_sample != null ? [{ start_sample: l.start_sample, end_sample: l.end_sample, start_s: l.start_s, end_s: l.end_s }] : [];
+  delete l.start_sample; delete l.end_sample; delete l.start_s; delete l.end_s;
+  l.status = labelStatus(l);
+  return l;
+}
+
+/** Where file labels of the current work space live. */
+const WS = { kind: "personal", pid: null, proj: null, list: [], index: new Map(), presence: {}, unsub: [], myPresence: null };
+async function fileRefW(rel) {
+  if (WS.kind === "project") return DB.doc(`projects/${WS.pid}/files/${await keyOf("file:" + rel)}`);
+  return (await folderRef(S.me.id, S.folder)).collection("files").doc(await keyOf("file:" + rel));
+}
+const fileDocs = new Map();   // rel -> {file, dataset, label, history} for the current work space
+const myLabels = new Map();   // rel -> normalized saved label
 
 async function getUser(uid) { const sn = await retry(() => acctRef(uid).get()); return sn.exists ? plain(sn.data()) : null; }
 async function putUser(u) { await retry(() => acctRef(u.id).set(plain(u))); }
@@ -374,33 +455,63 @@ async function log(uid, action, { dataset = null, file = null, before = null, af
   S.me.events = [...(S.me.events || []), { id: newId(), ts: now(), action, dataset, file, before, after, detail }].slice(-MAX_EVENTS);
   try { await putUser(S.me); } catch (e) { toast(dbMsg(e)); }
 }
-async function loadDocs(folder) {
-  const out = new Map();
+/** Project-level event (created, invited, assigned…), kept on the project doc. */
+async function projLog(action, detail = null) {
+  if (WS.kind !== "project" || !WS.proj) return;
+  const p = plain(WS.proj);
+  p.events = [...(p.events || []), { id: newId(), ts: now(), user_id: S.me.id, action, detail }].slice(-300);
+  try { await retry(() => DB.doc(`projects/${WS.pid}`).set(p)); WS.proj = p; } catch (e) { toast(dbMsg(e)); }
+}
+function setDocs(docs) {
+  fileDocs.clear(); myLabels.clear();
+  for (const x of docs) { if (!x || !x.file) continue; x.label = normLabel(x.label); fileDocs.set(x.file, x); if (x.label) myLabels.set(x.file, x.label); }
+}
+async function loadPersonalDocs(folder) {
   const sn = await retry(async () => (await folderRef(S.me.id, folder)).collection("files").get());
-  for (const d of sn.docs) { const x = plain(d.data()); if (x && x.file) out.set(x.file, x); }
-  return out;
+  return sn.docs.map((d) => plain(d.data()));
+}
+async function reloadMyLabels() {
+  if (WS.kind === "project") return;            // live via onSnapshot
+  if (!S.folder) { setDocs([]); return; }
+  setDocs(await loadPersonalDocs(S.folder));
 }
 
-/** Checkpoint save: writes the label and ONE history row listing what changed since the last save.
- *  Returns null when nothing changed. A file saved as 미작업 with no region and no memo keeps only its history. */
-async function commitLabel(uid, folder, file, f) {
-  const ref = await fileRef(uid, folder, file), sn = await retry(() => ref.get()), t = now();
-  const doc = sn.exists ? plain(sn.data()) : { file, dataset: folder, user_id: uid, label: null, history: [] };
-  const old = doc.label;
-  const oldReg = old ? regionText(old.start_s, old.end_s).replace("비프 없음", "없음") : "없음";
-  const newReg = regionText(f.start_s, f.end_s).replace("비프 없음", "없음");
+/** Checkpoint save: writes the label and ONE history row (with the label before it, so the save can be undone).
+ *  Returns null when nothing changed, {conflict} when someone else saved since this view loaded it. */
+async function commitLabel(rel, f, { expect, force } = {}) {
+  const ref = await fileRefW(rel), sn = await retry(() => ref.get()), t = now();
+  const doc = sn.exists ? plain(sn.data()) : { file: rel, dataset: S.folder, label: null, history: [] };
+  const old = normLabel(doc.label);
+  if (!force && WS.kind === "project" && old && (old.updated_at || null) !== (expect || null) && old.updated_by !== S.me.id) return { conflict: { ...doc, label: old } };
+  const oldReg = regionsText(old?.regions), newReg = regionsText(f.regions);
   const oldSt = STATUS_NAME[labelStatus(old)], newSt = STATUS_NAME[f.status];
   const before = [], after = [], what = [];
   if (oldReg !== newReg) { before.push(`구간: ${oldReg}`); after.push(`구간: ${newReg}`); what.push("구간"); }
   if (oldSt !== newSt) { before.push(`상태: ${oldSt}`); after.push(`상태: ${newSt}`); what.push("상태"); }
   if ((old?.memo || "") !== (f.memo || "")) { before.push(`메모: ${old?.memo || "(없음)"}`); after.push(`메모: ${f.memo || "(없음)"}`); what.push("메모"); }
   if (!what.length) return null;
-  const empty = f.status === "none" && f.start_sample == null && !f.memo;
-  doc.label = empty ? null : { ...(old || { created_at: t }), dataset: folder, file, user_id: uid, ...f, reviewed: f.status === "reviewed" ? 1 : 0, updated_at: t };
-  doc.history = [...(doc.history || []), { id: newId(), ts: t, action: "저장", before: before.join("\n"), after: after.join("\n"), detail: what.join("·") + " 변경" }].slice(-MAX_FILE_HISTORY);
+  const empty = f.status === "none" && !f.regions.length && !f.memo;
+  doc.label = empty ? null : { ...(old || { created_at: t }), dataset: S.folder, file: rel, ...f, reviewed: f.status === "reviewed" ? 1 : 0,
+    user_id: S.me.id, updated_by: S.me.id, updated_by_name: S.me.display_name, updated_at: t };
+  doc.history = [...(doc.history || []), { id: newId(), ts: t, user_id: S.me.id, user_name: S.me.display_name, action: "저장",
+    before: before.join("\n"), after: after.join("\n"), detail: what.join("·") + " 변경", prev: old }].slice(-MAX_FILE_HISTORY);
   await retry(() => ref.set(doc));
-  fileDocs.set(file, doc);
+  doc.label = normLabel(doc.label); fileDocs.set(rel, doc);
+  if (doc.label) myLabels.set(rel, doc.label); else myLabels.delete(rel);
   return { label: doc.label };
+}
+/** ↶ Undo the last save: back to the label before it, and that save's history row is removed. */
+async function undoLastSave(rel) {
+  const ref = await fileRefW(rel), sn = await retry(() => ref.get());
+  if (!sn.exists) return null;
+  const doc = plain(sn.data()), last = (doc.history || []).filter((h) => h.action === "저장").pop();
+  if (!last) return null;
+  doc.history = doc.history.filter((h) => h.id !== last.id);
+  doc.label = last.prev ? { ...last.prev } : null;
+  if (!doc.label && !doc.history.length) await retry(() => ref.delete()); else await retry(() => ref.set(doc));
+  doc.label = normLabel(doc.label); fileDocs.set(rel, doc);
+  if (doc.label) myLabels.set(rel, doc.label); else myLabels.delete(rel);
+  return { undone: last, label: doc.label };
 }
 
 /* ============================== audio ============================== */
@@ -464,10 +575,7 @@ async function wavInfo(file) {
   const len = Math.min(file.size - h.dataOff, (h.dataLen === 0 || h.dataOff + h.dataLen >= (1 << 20)) ? file.size - h.dataOff : h.dataLen);
   return { sr: h.sr, n: Math.floor(Math.max(0, len) / (B * h.ch)), ch: h.ch };
 }
-async function sha256hex(buf) {
-  const d = await crypto.subtle.digest("SHA-256", buf);
-  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
+async function sha256hex(buf) { return toHex(await crypto.subtle.digest("SHA-256", buf)); }
 function frameBounds(n, sr) {
   const step = sr * FRAME_MS / 1000, nFull = Math.floor(n / step + 1e-9), edges = [];
   for (let k = 0; k <= nFull; k++) { const e = rint(k * step); if (e <= n) edges.push(e); }
@@ -514,10 +622,9 @@ function spectrogram(y, sr) {
 }
 
 /* ============================== state ============================== */
-const S = { me: null, folder: null, files: [], idx: -1, view: null, region: null, status: "none", memo: "",
-  saved: null, v0: 0, v1: 1, cursor: 0, hoverX: -1, undo: [], redo: [], big: false, gain: 1,
+const S = { me: null, folder: null, files: [], idx: -1, view: null, regions: [], sel: -1, status: "none", memo: "",
+  saved: null, loadedStamp: null, v0: 0, v1: 1, hoverX: -1, undo: [], redo: [], big: false, gain: 1,
   specImg: null, history: [], histEdit: false, playEnd: null };
-const myLabels = new Map();   // file -> saved label (current folder, me)
 
 /* ============================== theme ============================== */
 let C = {};
@@ -525,7 +632,7 @@ function readColors() { const cs = getComputedStyle(document.documentElement); f
 function isDark() { const a = document.documentElement.dataset.theme; return a ? a === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; }
 async function toggleTheme() {
   const t = isDark() ? "light" : "dark"; document.documentElement.dataset.theme = t; readColors(); draw();
-  if (S.me) { S.me.theme = t; await putUser(S.me); }
+  if (S.me) { S.me.theme = t; try { await putUser(S.me); } catch (e) {} }
 }
 document.querySelectorAll(".theme-btn").forEach((b) => (b.onclick = toggleTheme));
 matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { readColors(); draw(); });
@@ -556,7 +663,7 @@ $("login-form").onsubmit = async (ev) => {
       const lease = await retry(() => acctRef(id).acquire({ holder: newId(), ttlMs: 5000 }));
       if (!lease.acquired || (await getUser(id))) return err("방금 다른 사람이 같은 아이디를 만들었습니다. 다른 아이디를 쓰세요.");
       const salt = newSalt();
-      u = { id, display_name: $("lg-name").value.trim().slice(0, 40) || id, created_at: now(), last_login: null, theme: null, last_file: null, folder_name: null,
+      u = { id, display_name: $("lg-name").value.trim().slice(0, 40) || id, created_at: now(), last_login: null, theme: null, last_file: null, folder_name: null, last_ws: "personal",
         salt, iter: PBKDF2_ITER, pw_hash: await pwHash(pw, salt), events: [] };
       await putUser(u); S.me = u; await log(id, "아이디 생성", { detail: u.display_name !== id ? u.display_name : null });
     } else if (!u.pw_hash || (await pwHash(pw, u.salt, u.iter || PBKDF2_ITER)) !== u.pw_hash) {
@@ -571,9 +678,11 @@ $("login-form").onsubmit = async (ev) => {
 };
 async function logout() {
   if (isDirty()) await save();                       // "저장 후 로그아웃"
+  await setPresence(null);
   if (S.me) await log(S.me.id, "저장 후 로그아웃");
+  stopWatch();
   try { sessionStorage.removeItem("bl-session"); } catch (e) {}
-  S.me = null; S.view = null; S.idx = -1; S.files = []; S.folder = null; myLabels.clear(); fileDocs.clear();
+  S.me = null; S.view = null; S.idx = -1; S.files = []; S.folder = null; setDocs([]); Object.assign(WS, { kind: "personal", pid: null, proj: null, list: [], index: new Map(), presence: {} });
   showLogin();
 }
 $("btn-logout").onclick = logout;
@@ -586,13 +695,18 @@ async function startApp(u) {
   $("who").textContent = u.display_name === u.id ? u.id : `${u.display_name} (${u.id})`;
   $("last-folder").textContent = u.folder_name ? `지난번 폴더: ${u.folder_name}` : "";
   S.files = []; S.view = null; renderFiles(); resize(); showEmpty();
+  await renderWsSelect();
+  const want = u.last_ws && u.last_ws !== "personal" && [...$("ws-select").options].some((o) => o.value === u.last_ws) ? u.last_ws : "personal";
+  $("ws-select").value = want;
+  await switchWorkspace(want, true);
 }
 function showEmpty(msg) {
   const e = $("empty"), has = !!S.view;
   e.hidden = has; $("wrap").hidden = !has; $("region-bar").hidden = !has; $("status-seg").hidden = !has;
   if (!has) e.innerHTML = msg || (S.files.length ? "왼쪽에서 파일을 고르세요."
-    : `<b>WAV 폴더를 선택하세요.</b> 왼쪽 위 <b>📁 WAV 폴더 선택</b>을 누르거나 폴더를 끌어다 놓으세요. 내 PC 폴더나 NAS 폴더 모두 됩니다.` +
-      (S.me?.folder_name ? `<br>지난번에 작업한 폴더: <code>${esc(S.me.folder_name)}</code> — 같은 폴더를 다시 선택하면 이전 작업이 이어집니다.` : ""));
+    : `<b>WAV 폴더를 선택하세요.</b> 왼쪽 <b>📁 WAV 폴더 선택</b>을 누르거나 폴더를 끌어다 놓으세요. 내 PC 폴더나 NAS 폴더 모두 됩니다.` +
+      (WS.kind === "project" ? `<br>공동 작업 <b>${esc(WS.proj?.name || "")}</b>: 방장과 <b>같은 파일 구조</b>의 폴더를 여세요.` : "") +
+      (S.me?.folder_name ? `<br>지난번에 작업한 폴더: <code>${esc(S.me.folder_name)}</code>` : ""));
 }
 /** Before leaving a file with unsaved edits: 저장 / 저장 안 함 / 취소. Returns false to stay. */
 async function confirmLeave() {
@@ -601,6 +715,204 @@ async function confirmLeave() {
   if (a === "yes") { await save(); return true; }
   return a === "alt";
 }
+
+/* ============================== work spaces (personal / shared projects) ============================== */
+async function myProjects() {
+  try { const sn = await retry(() => DB.collection("projects").where("members", "array-contains", S.me.id).get()); return sn.docs.map((d) => plain(d.data())).sort((a, b) => (a.created_at < b.created_at ? -1 : 1)); }
+  catch (e) { toast(dbMsg(e)); return []; }
+}
+async function renderWsSelect() {
+  const ps = await myProjects(), sel = $("ws-select"), cur = sel.value;
+  sel.innerHTML = `<option value="personal">개인 작업</option>` + ps.map((p) => `<option value="${esc(p.pid)}">공동: ${esc(p.name)}${p.owner === S.me.id ? " (방장)" : ""}</option>`).join("");
+  if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
+}
+$("ws-select").onchange = async () => {
+  const v = $("ws-select").value, prev = WS.kind === "project" ? WS.pid : "personal";
+  if (!(await confirmLeave())) { $("ws-select").value = prev; return; }
+  await switchWorkspace(v);
+};
+// new invitations show up without reloading (skipped while the list is in use)
+setInterval(() => { if (S.me && DB && document.activeElement !== $("ws-select")) renderWsSelect(); }, 60000);
+function stopWatch() { for (const u of WS.unsub) { try { u(); } catch (e) {} } WS.unsub = []; }
+async function switchWorkspace(v, initial = false) {
+  await setPresence(null); stopWatch(); stop();
+  S.saved = null;
+  if (v === "personal") {
+    Object.assign(WS, { kind: "personal", pid: null, proj: null, list: [], index: new Map(), presence: {} });
+    await reloadMyLabels();
+  } else {
+    Object.assign(WS, { kind: "project", pid: v, proj: null, list: [], index: new Map(), presence: {} });
+    setDocs([]);
+    await watchProject();
+  }
+  if (S.me.last_ws !== v) { S.me.last_ws = v; try { await putUser(S.me); } catch (e) {} }
+  renderProjPanel(); renderFiles();
+  if (S.files.length) openFile(S.idx >= 0 ? S.idx : 0, true); else showEmpty();
+  if (!initial) toast(v === "personal" ? "개인 작업으로 바꿨습니다." : `공동 작업 '${WS.proj?.name || ""}'(으)로 바꿨습니다.`);
+}
+function watchProject() {
+  return new Promise((ready) => {
+    let first = 0; const done = () => { if (++first === 3) ready(); };
+    const pid = WS.pid, onErr = (e) => { toast(dbMsg(e)); done(); };
+    WS.unsub.push(DB.doc(`projects/${pid}`).onSnapshot((sn) => {
+      if (WS.pid !== pid) return;
+      WS.proj = sn.exists ? plain(sn.data()) : null;
+      if (WS.proj && !WS.proj.members.includes(S.me.id)) { WS.proj = null; toast("이 공동 작업에서 빠졌습니다."); }
+      renderProjPanel(); renderFiles(); done();
+    }, onErr));
+    WS.unsub.push(DB.doc(`projects/${pid}/meta/files`).onSnapshot((sn) => {
+      if (WS.pid !== pid) return;
+      WS.list = sn.exists ? plain(sn.data()).list || [] : [];
+      WS.index = new Map(WS.list.map((r, i) => [r, i]));
+      renderProjPanel(); renderFiles(); done();
+    }, onErr));
+    WS.unsub.push(DB.collection(`projects/${pid}/files`).onSnapshot((sn) => {
+      if (WS.pid !== pid) return;
+      setDocs(sn.docs.map((d) => plain(d.data())));
+      onLiveLabels(); done();
+    }, onErr));
+    WS.unsub.push(DB.collection(`projects/${pid}/presence`).onSnapshot((sn) => {
+      if (WS.pid !== pid) return;
+      WS.presence = Object.fromEntries(sn.docs.map((d) => [d.id, plain(d.data())]));
+      renderProjPanel(); renderFiles();
+    }, (e) => toast(dbMsg(e))));
+  });
+}
+/** Another member saved: refresh the open file unless this view has unsaved edits. */
+function onLiveLabels() {
+  renderFiles(); renderProjPanel();
+  if (!S.view || S.idx < 0) return;
+  const rel = S.files[S.idx].rel, l = myLabels.get(rel) || null, st = l?.updated_at || null;
+  if (st === S.loadedStamp) { loadHistory(); return; }
+  if (l && l.updated_by === S.me.id) { S.loadedStamp = st; loadHistory(); return; }
+  if (!isDirty()) { applySaved(l); refreshPanels(); draw(); loadHistory(); if (l) toast(`${nameOf(l.updated_by)}님이 이 파일을 저장해서 최신 내용으로 바꿨습니다.`); }
+  else toast(`${nameOf(l?.updated_by)}님이 이 파일을 방금 저장했습니다. 저장하면 덮어쓸지 묻습니다.`);
+}
+const nameOf = (uid) => (uid ? WS.proj?.names?.[uid] || uid : "");
+const colorOf = (uid) => WS.proj?.colors?.[uid] || "#888";
+function assigneeOf(rel) {
+  if (WS.kind !== "project" || !WS.proj) return null;
+  const i = WS.index.get(rel); if (i == null) return null;
+  const r = (WS.proj.ranges || []).find((x) => i + 1 >= x.from && i + 1 <= x.to);
+  return r ? r.uid : null;
+}
+async function setPresence(rel) {
+  if (WS.kind !== "project" || !S.me || !DB) return;
+  if (WS.myPresence === rel) return;
+  WS.myPresence = rel;
+  try { await DB.doc(`projects/${WS.pid}/presence/${S.me.id}`).set({ uid: S.me.id, file: rel, ts: now(), t: Date.now() }); } catch (e) {}
+}
+const activeOn = (uid) => { const p = WS.presence[uid]; return p && p.file && Date.now() - (p.t || 0) < PRESENCE_FRESH_MS ? p.file : null; };
+function renderProjPanel() {
+  const on = WS.kind === "project" && !!WS.proj;
+  $("proj-panel").hidden = !on; $("btn-new-proj").hidden = on;
+  if (!on) return;
+  const P0 = WS.proj, isOwner = P0.owner === S.me.id;
+  $("proj-owner-tools").hidden = !isOwner;
+  $("proj-members").innerHTML = P0.members.map((uid) => {
+    const mine = WS.list.filter((r) => assigneeOf(r) === uid), done = mine.filter((r) => labelStatus(myLabels.get(r)) === "reviewed").length;
+    const draft = mine.filter((r) => labelStatus(myLabels.get(r)) === "draft").length, cur = activeOn(uid), ci = cur != null ? WS.index.get(cur) : null;
+    const rg = (P0.ranges || []).filter((x) => x.uid === uid).map((x) => `${x.from}~${x.to}`).join(", ");
+    return `<li><span class="swatch" style="background:${colorOf(uid)}"></span><div><b>${esc(nameOf(uid))}</b>${uid === P0.owner ? ' <span class="muted small">방장</span>' : ""}${uid === S.me.id ? ' <span class="muted small">(나)</span>' : ""}
+      <div class="muted small">${rg ? `#${esc(rg)} · ` : "배정 없음 · "}검수 ${done}/${mine.length}${draft ? ` · 작업 중 ${draft}` : ""}</div>
+      ${cur ? `<div class="small live" style="color:${colorOf(uid)}">● 지금 ${ci != null ? `#${ci + 1} ` : ""}${esc(cur)}</div>` : ""}</div></li>`;
+  }).join("");
+}
+
+/* ---- create project ---- */
+$("btn-new-proj").onclick = () => {
+  if (!S.folder) { toast("먼저 공동 작업할 WAV 폴더를 여세요."); return; }
+  $("pn-name").value = S.folder; $("pn-ids").value = ""; $("pn-error").textContent = ""; $("dlg-proj-new").showModal();
+};
+$("pn-create").onclick = async () => {
+  const name = $("pn-name").value.trim() || S.folder, ids = [...new Set($("pn-ids").value.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean))].filter((x) => x !== S.me.id);
+  const err = (m) => ($("pn-error").textContent = m);
+  try {
+    const missing = []; const names = { [S.me.id]: S.me.display_name };
+    for (const id of ids) { const u = await getUser(id); if (!u) missing.push(id); else names[id] = u.display_name; }
+    if (missing.length) return err(`없는 아이디: ${missing.join(", ")} (상대가 먼저 아이디를 만들어야 합니다)`);
+    if (S.files.length > 5000) return err("파일이 5,000개를 넘는 폴더는 공동 작업으로 만들 수 없습니다.");
+    const pid = "p" + newId(), members = [S.me.id, ...ids];
+    const proj = { pid, name, owner: S.me.id, members, names, colors: Object.fromEntries(members.map((m, i) => [m, COLORS[i % COLORS.length]])), ranges: [], created_at: now(),
+      events: [{ id: newId(), ts: now(), user_id: S.me.id, action: "공동 작업 만들기", detail: `${name} · 파일 ${S.files.length}개 · 참여자 ${members.join(", ")}` }] };
+    await retry(() => DB.doc(`projects/${pid}/meta/files`).set({ list: S.files.map((f) => f.rel), updated_at: now() }));
+    if ($("pn-copy").checked) {
+      for (const [rel, d] of fileDocs) if (d.label) await retry(async () => DB.doc(`projects/${pid}/files/${await keyOf("file:" + rel)}`).set({ file: rel, dataset: S.folder, label: { ...d.label, updated_by: S.me.id, updated_by_name: S.me.display_name }, history: d.history || [] }));
+    }
+    await retry(() => DB.doc(`projects/${pid}`).set(proj));
+    await log(S.me.id, "공동 작업 만들기", { detail: name });
+    $("dlg-proj-new").close();
+    await renderWsSelect(); $("ws-select").value = pid; await switchWorkspace(pid);
+  } catch (e) { err(dbMsg(e)); }
+};
+/* ---- invite / remove members ---- */
+function renderInvite() {
+  const P0 = WS.proj;
+  $("inv-list").innerHTML = P0.members.map((uid) => `<li><span class="swatch" style="background:${colorOf(uid)}"></span><b>${esc(nameOf(uid))}</b> <span class="muted small">${esc(uid)}${uid === P0.owner ? " · 방장" : ""}</span>${uid !== P0.owner ? `<button type="button" class="small-btn" data-rm="${esc(uid)}">빼기</button>` : ""}</li>`).join("");
+  $("inv-list").querySelectorAll("[data-rm]").forEach((b) => (b.onclick = async () => {
+    const uid = b.dataset.rm;
+    if ((await ask("참여자 빼기", `${nameOf(uid)}(${uid})님을 공동 작업에서 뺄까요?\n그 사람에게 배정된 범위도 지워집니다. (저장된 라벨은 남습니다)`, "빼기")) !== "yes") return;
+    const p = plain(WS.proj); p.members = p.members.filter((m) => m !== uid); p.ranges = (p.ranges || []).filter((r) => r.uid !== uid);
+    try { await retry(() => DB.doc(`projects/${WS.pid}`).set(p)); WS.proj = p; await projLog("참여자 빼기", uid); renderInvite(); } catch (e) { $("inv-error").textContent = dbMsg(e); }
+  }));
+}
+$("btn-invite").onclick = () => { $("inv-id").value = ""; $("inv-error").textContent = ""; renderInvite(); $("dlg-invite").showModal(); };
+$("inv-add").onclick = async () => {
+  const id = $("inv-id").value.trim(), err = (m) => ($("inv-error").textContent = m);
+  if (!id) return;
+  if (WS.proj.members.includes(id)) return err("이미 참여 중인 아이디입니다.");
+  try {
+    const u = await getUser(id); if (!u) return err("없는 아이디입니다. 상대가 먼저 이 링크에서 아이디를 만들어야 합니다.");
+    const p = plain(WS.proj), used = new Set(Object.values(p.colors || {}));
+    p.members = [...p.members, id]; p.names = { ...(p.names || {}), [id]: u.display_name };
+    p.colors = { ...(p.colors || {}), [id]: COLORS.find((c) => !used.has(c)) || COLORS[p.members.length % COLORS.length] };
+    await retry(() => DB.doc(`projects/${WS.pid}`).set(p)); WS.proj = p; await projLog("참여자 초대", id);
+    $("inv-id").value = ""; err(""); renderInvite();
+  } catch (e) { err(dbMsg(e)); }
+};
+/* ---- assign file ranges ---- */
+function renderAssign(ranges) {
+  const n = WS.list.length; $("as-n").textContent = n;
+  $("as-rows").innerHTML = WS.proj.members.map((uid) => {
+    const r = ranges.find((x) => x.uid === uid);
+    return `<tr data-uid="${esc(uid)}"><td><input type="checkbox" class="as-inc" ${r || uid !== WS.proj.owner ? "checked" : ""} aria-label="포함"></td>
+      <td><span class="swatch" style="background:${colorOf(uid)}"></span>${esc(nameOf(uid))}</td>
+      <td><input type="number" class="as-from" min="1" max="${n}" value="${r ? r.from : ""}" aria-label="시작 번호"></td>
+      <td><input type="number" class="as-to" min="1" max="${n}" value="${r ? r.to : ""}" aria-label="끝 번호"></td><td class="as-cnt num"></td></tr>`;
+  }).join("");
+  const count = () => $("as-rows").querySelectorAll("tr").forEach((tr) => { const a = +tr.querySelector(".as-from").value, b = +tr.querySelector(".as-to").value; tr.querySelector(".as-cnt").textContent = a && b && b >= a ? b - a + 1 : ""; });
+  $("as-rows").querySelectorAll("input").forEach((i) => (i.oninput = count)); count();
+}
+$("btn-assign").onclick = () => { $("as-error").textContent = ""; renderAssign(WS.proj.ranges || []); $("dlg-assign").showModal(); };
+$("as-even").onclick = () => {
+  const rows = [...$("as-rows").querySelectorAll("tr")].filter((tr) => tr.querySelector(".as-inc").checked), n = WS.list.length;
+  if (!rows.length) { $("as-error").textContent = "균등 분배할 사람을 체크하세요."; return; }
+  let start = 1;
+  rows.forEach((tr, i) => { const size = Math.floor(n / rows.length) + (i < n % rows.length ? 1 : 0); tr.querySelector(".as-from").value = size ? start : ""; tr.querySelector(".as-to").value = size ? start + size - 1 : ""; start += size; });
+  $("as-rows").querySelectorAll("tr").forEach((tr) => { if (!tr.querySelector(".as-inc").checked) { tr.querySelector(".as-from").value = ""; tr.querySelector(".as-to").value = ""; } });
+  $("as-rows").querySelector("input").dispatchEvent(new Event("input"));
+};
+$("as-clear").onclick = () => { $("as-rows").querySelectorAll(".as-from, .as-to").forEach((i) => (i.value = "")); $("as-rows").querySelector("input")?.dispatchEvent(new Event("input")); };
+$("as-relist").onclick = async () => {
+  if (!S.folder) { $("as-error").textContent = "먼저 폴더를 여세요."; return; }
+  if ((await ask("파일 목록 갱신", `지금 열어 둔 폴더(${S.folder})의 파일 ${S.files.length}개로 번호를 다시 매깁니다.\n기존 배정 범위의 번호가 다른 파일을 가리킬 수 있으니 배정도 다시 확인하세요.`, "갱신")) !== "yes") return;
+  try { await retry(() => DB.doc(`projects/${WS.pid}/meta/files`).set({ list: S.files.map((f) => f.rel), updated_at: now() })); await projLog("파일 목록 갱신", `${S.files.length}개`); renderAssign(WS.proj.ranges || []); }
+  catch (e) { $("as-error").textContent = dbMsg(e); }
+};
+$("as-save").onclick = async () => {
+  const n = WS.list.length, ranges = [];
+  for (const tr of $("as-rows").querySelectorAll("tr")) {
+    const a = +tr.querySelector(".as-from").value, b = +tr.querySelector(".as-to").value;
+    if (!a && !b) continue;
+    if (!(a >= 1 && b >= a && b <= n)) { $("as-error").textContent = `${nameOf(tr.dataset.uid)}: 1 ~ ${n} 사이로 시작 ≤ 끝이 되게 적으세요.`; return; }
+    ranges.push({ uid: tr.dataset.uid, from: a, to: b });
+  }
+  const sorted = [...ranges].sort((x, y) => x.from - y.from);
+  for (let i = 1; i < sorted.length; i++) if (sorted[i].from <= sorted[i - 1].to) { $("as-error").textContent = `${nameOf(sorted[i - 1].uid)}와 ${nameOf(sorted[i].uid)}의 범위가 겹칩니다.`; return; }
+  const p = plain(WS.proj); p.ranges = ranges;
+  try { await retry(() => DB.doc(`projects/${WS.pid}`).set(p)); WS.proj = p; await projLog("작업 배정", ranges.map((r) => `${nameOf(r.uid)} #${r.from}~${r.to}`).join(", ") || "배정 없음"); $("dlg-assign").close(); renderProjPanel(); renderFiles(); }
+  catch (e) { $("as-error").textContent = dbMsg(e); }
+};
 
 /* ============================== folder ============================== */
 $("btn-folder").onclick = async () => { if (await confirmLeave()) $("folder-input").click(); };
@@ -618,10 +930,6 @@ drop.ondrop = async (e) => {
   for (const it of items) await walk(it, "");
   if (await confirmLeave()) loadFolder(out);
 };
-async function reloadMyLabels() {
-  const docs = await loadDocs(S.folder); fileDocs.clear(); myLabels.clear();
-  for (const [rel, d] of docs) { fileDocs.set(rel, d); if (d.label) myLabels.set(rel, d.label); }
-}
 async function loadFolder(entries) {
   stop();
   const wav = entries.filter((x) => /\.wav$/i.test(x.path));
@@ -632,37 +940,52 @@ async function loadFolder(entries) {
     .sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
   const prev = S.me.folder_name;
   S.folder = root; S.files = files; S.idx = -1; S.view = null; S.saved = null;
-  if (prev !== root) { await log(S.me.id, "데이터 폴더 변경", { before: prev, after: root, detail: `WAV ${files.length}개` }); S.me.folder_name = root; await putUser(S.me); }
-  if (prev && prev !== root) toast(`지난번 폴더(${prev})와 이름이 다릅니다. 기록은 폴더 이름별로 따로 저장됩니다.`);
-  try { await reloadMyLabels(); await retry(async () => (await folderRef(S.me.id, root)).set({ folder: root, updated_at: now() })); }
-  catch (e) { toast(dbMsg(e)); }
+  if (prev !== root) { S.me.folder_name = root; await log(S.me.id, "데이터 폴더 변경", { before: prev, after: root, detail: `WAV ${files.length}개` }); }
+  if (WS.kind === "personal") {
+    if (prev && prev !== root) toast(`지난번 폴더(${prev})와 이름이 다릅니다. 개인 기록은 폴더 이름별로 따로 저장됩니다.`);
+    try { await reloadMyLabels(); await retry(async () => (await folderRef(S.me.id, root)).set({ folder: root, updated_at: now() })); } catch (e) { toast(dbMsg(e)); }
+  } else if (WS.list.length) {
+    const missing = WS.list.filter((r) => !files.some((f) => f.rel === r)).length, extra = files.filter((f) => !WS.index.has(f.rel)).length;
+    if (missing || extra) toast(`공동 작업 목록과 다릅니다: 이 폴더에 없는 파일 ${missing}개, 목록에 없는 파일 ${extra}개`);
+  }
   $("folder-label").textContent = `📁 ${root} (${files.length}개)`; $("last-folder").textContent = "";
   renderFiles(); showEmpty();
   const last = files.findIndex((f) => f.rel === S.me.last_file);
-  const first = last >= 0 ? last : Math.max(0, files.findIndex((f) => statusOf(f.rel) !== "reviewed"));
-  openFile(first, true);
+  const mineFirst = files.findIndex((f) => (WS.kind !== "project" || assigneeOf(f.rel) === S.me.id) && statusOf(f.rel) !== "reviewed");
+  openFile(last >= 0 ? last : Math.max(0, mineFirst), true);
   for (const f of files) { try { f.info = await wavInfo(f.file); } catch (e) { f.info = { error: e.message }; } }
   renderFiles();
 }
 
 /* ============================== file list ============================== */
 const statusOf = (rel) => labelStatus(myLabels.get(rel));
+function numberOf(rel, i) { return WS.kind === "project" ? (WS.index.has(rel) ? WS.index.get(rel) + 1 : null) : i + 1; }
 function renderFiles() {
   const q = $("filter").value.toLowerCase(), sf = $("status-filter").value, ul = $("files");
   ul.innerHTML = "";
+  const viewers = {}; if (WS.kind === "project") for (const uid of WS.proj?.members || []) { const f = activeOn(uid); if (f && uid !== S.me.id) (viewers[f] ||= []).push(uid); }
   S.files.forEach((f, i) => {
-    const st = statusOf(f.rel);
+    const st = statusOf(f.rel), who = assigneeOf(f.rel);
     if (q && !f.rel.toLowerCase().includes(q)) return;
-    if (sf && st !== sf) return;
-    const l = myLabels.get(f.rel), li = document.createElement("li");
+    if (sf === "mine" ? WS.kind === "project" && who !== S.me.id : sf && st !== sf) return;
+    const l = myLabels.get(f.rel), li = document.createElement("li"), num = numberOf(f.rel, i);
     li.dataset.idx = i; li.className = i === S.idx ? "active" : "";
+    if (who) li.style.boxShadow = `inset 4px 0 0 ${colorOf(who)}`;
     const dur = f.info && !f.info.error ? (f.info.n / f.info.sr).toFixed(1) + "s" : f.info?.error ? "⚠" : "";
-    li.innerHTML = `<span class="dot ${st}"></span><span class="name" title="${esc(f.rel)}">${esc(f.rel)}</span><span class="dur">${dur}</span>` +
-      (l && (l.start_s != null || st === "reviewed") ? `<span class="reg">${esc(regionText(l.start_s, l.end_s))}</span>` : "");
+    const live = (viewers[f.rel] || []).map((u) => `<span class="badge" style="background:${colorOf(u)}">✎ ${esc(nameOf(u))}</span>`).join("");
+    const sub = [who ? `<span style="color:${colorOf(who)}">${esc(nameOf(who))}</span>` : "", l && (l.regions.length || st === "reviewed") ? esc(regionsText(l.regions)) : ""].filter(Boolean).join(" · ");
+    li.innerHTML = `<span class="dot ${st}"></span><span class="name" title="${esc(f.rel)}">${num != null ? `<span class="num muted">#${num}</span> ` : ""}${esc(f.rel)}</span><span class="dur">${dur}</span>` +
+      (sub || live ? `<span class="reg">${live}${live && sub ? " " : ""}${sub}</span>` : "");
     li.onclick = () => openFile(i); ul.appendChild(li);
   });
-  const done = S.files.filter((f) => statusOf(f.rel) === "reviewed").length;
-  $("progress").textContent = S.files.length ? `내 검수 ${done} / ${S.files.length}` : "폴더 없음";
+  if (WS.kind === "project") {
+    const n = WS.list.length || S.files.length, done = (WS.list.length ? WS.list : S.files.map((f) => f.rel)).filter((r) => statusOf(r) === "reviewed").length;
+    const mine = WS.list.filter((r) => assigneeOf(r) === S.me.id), mineDone = mine.filter((r) => statusOf(r) === "reviewed").length;
+    $("progress").textContent = `전체 검수 ${done}/${n} · 내 담당 ${mineDone}/${mine.length}`;
+  } else {
+    const done = S.files.filter((f) => statusOf(f.rel) === "reviewed").length;
+    $("progress").textContent = S.files.length ? `내 검수 ${done} / ${S.files.length}` : "폴더 없음";
+  }
 }
 $("filter").oninput = renderFiles; $("status-filter").onchange = renderFiles;
 
@@ -687,14 +1010,24 @@ const regionAt = (y) => Object.keys(P).find((k) => y >= P[k][0] && y < P[k][1]) 
 function lowerBound(a, v) { let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < v) lo = m + 1; else hi = m; } return lo; }
 const nF = () => S.view.fb.starts.length;
 function frameAt(s) { return Math.min(lowerBound(S.view.fb.ends, s + 1), nF() - 1); }
-function boundary(k) { return k < nF() ? S.view.fb.starts[k] : S.view.fb.ends[nF() - 1]; }
-// Region boundaries sit on a 10 ms grid (k * sr / 100 samples); the beep region has no length limit.
+// Region boundaries sit on a 10 ms grid (k * sr / 100 samples); regions have no length limit.
 const step10 = () => S.view.sr / 100;
 const toGrid = (s) => Math.max(0, Math.min(nS(), rint(Math.floor(s / step10() + 1e-9) * step10())));
 const gridSec = (s) => Math.floor(s / step10() + 1e-6) / 100;
-function regText(r) { if (!r) return S.status === "reviewed" ? "비프 없음" : "지정 안 됨"; return `${gridSec(r[0]).toFixed(2)} ~ ${gridSec(r[1]).toFixed(2)}초`; }
+const regStr = (r) => `${gridSec(r[0]).toFixed(2)}~${gridSec(r[1]).toFixed(2)}초`;
 function centered(c) { const L = Math.min(rint(S.view.sr * 0.1), nS()), s0 = toGrid(Math.max(0, Math.min(nS() - L, c - L / 2))); return [s0, Math.min(nS(), rint(s0 + L))]; }
 function minSpan(r) { const st = Math.max(1, rint(step10())); if (r[1] - r[0] < st) { if (r[0] + st <= nS()) r[1] = r[0] + st; else r[0] = Math.max(0, r[1] - st); } return r; }
+/** Sort regions and merge overlapping ones; keeps the selection on the same region. */
+function normalizeRegions(selRef = S.regions[S.sel]) {
+  const rs = S.regions.map((r) => [...r]).sort((a, b) => a[0] - b[0]), out = [];
+  let selAt = -1;
+  for (const r of rs) {
+    const last = out[out.length - 1], isSel = selRef && r[0] === selRef[0] && r[1] === selRef[1];
+    if (last && r[0] <= last[1]) { last[1] = Math.max(last[1], r[1]); if (isSel) selAt = out.length - 1; }
+    else { out.push(r); if (isSel) selAt = out.length - 1; }
+  }
+  S.regions = out; S.sel = out.length ? (selAt >= 0 ? selAt : Math.min(S.sel, out.length - 1)) : -1;
+}
 
 const LUT = (() => {
   const st = [[0, [8, 8, 20]], [0.25, [40, 20, 90]], [0.5, [150, 40, 110]], [0.75, [245, 120, 40]], [1, [252, 250, 180]]], lut = new Uint8ClampedArray(768);
@@ -730,18 +1063,20 @@ function draw() {
   }
   const st = V.fb.starts, en = V.fb.ends, f0 = frameAt(S.v0), f1 = frameAt(Math.max(0, S.v1 - 1)), fw = xOf(en[0]) - xOf(st[0]);
   if (fw > 5) { ctx.strokeStyle = C.grid; for (let i = f0; i <= f1; i++) { const x = Math.round(xOf(st[i])) + 0.5; ctx.beginPath(); ctx.moveTo(x, wy0); ctx.lineTo(x, fy1); ctx.stroke(); } }
-  if (S.region) {
-    const x0 = xOf(S.region[0]), x1 = xOf(S.region[1]);
+  S.regions.forEach((r, k) => {
+    const x0 = xOf(r[0]), x1 = xOf(r[1]), sel = k === S.sel;
+    if (x1 < -2 || x0 > W + 2) return;
     ctx.fillStyle = C.region; ctx.fillRect(x0, wy0, x1 - x0, fy1 - wy0);
-    ctx.strokeStyle = C["region-line"]; ctx.lineWidth = 2; for (const x of [x0, x1]) { ctx.beginPath(); ctx.moveTo(x, wy0); ctx.lineTo(x, fy1); ctx.stroke(); } ctx.lineWidth = 1;
-    ctx.fillStyle = C["region-line"]; ctx.font = "600 11px 'IBM Plex Mono', monospace";
-    ctx.fillText(`${regText(S.region)} (${Math.round(msOf(S.region[1] - S.region[0]) / 10) * 10}ms)`, Math.max(2, x0 + 4), wy0 + 12);
-  }
+    if (sel) { ctx.fillRect(x0, wy0, x1 - x0, fy1 - wy0); }
+    ctx.strokeStyle = C["region-line"]; ctx.lineWidth = sel ? 3 : 1.5; for (const x of [x0, x1]) { ctx.beginPath(); ctx.moveTo(x, wy0); ctx.lineTo(x, fy1); ctx.stroke(); } ctx.lineWidth = 1;
+    ctx.fillStyle = C["region-line"]; ctx.font = `${sel ? "700" : "500"} 11px 'IBM Plex Mono', monospace`;
+    ctx.fillText(`#${k + 1} ${regStr(r)}${x1 - x0 > 160 ? ` (${Math.round(msOf(r[1] - r[0]) / 10) * 10}ms)` : ""}`, Math.max(2, x0 + 4), wy0 + 12 + (k % 2) * 13);
+  });
   ctx.fillStyle = C.track; ctx.fillRect(0, fy0, W, fy1 - fy0);
   for (let i = f0; i <= f1; i++) {
     const x0 = xOf(st[i]), w = Math.max(1, xOf(en[i]) - x0 - (fw > 4 ? 1 : 0));
     ctx.fillStyle = C.frame; ctx.fillRect(x0, fy0 + 2, w, fy1 - fy0 - 4);
-    if (S.region && S.region[0] < en[i] && S.region[1] > st[i]) { const a = xOf(Math.max(st[i], S.region[0])), b = xOf(Math.min(en[i], S.region[1])); ctx.fillStyle = C["frame-on"]; ctx.fillRect(a, fy0 + 2, Math.max(1, b - a), fy1 - fy0 - 4); }
+    for (const r of S.regions) if (r[0] < en[i] && r[1] > st[i]) { const a = xOf(Math.max(st[i], r[0])), b = xOf(Math.min(en[i], r[1])); ctx.fillStyle = C["frame-on"]; ctx.fillRect(a, fy0 + 2, Math.max(1, b - a), fy1 - fy0 - 4); }
     if (fw > 22) { ctx.fillStyle = C.text; ctx.font = "9px 'IBM Plex Mono', monospace"; ctx.fillText(i, x0 + 3, fy1 - 8); }
   }
   const span = (S.v1 - S.v0) / V.sr, tick = [0.1, 0.2, 0.5, 1, 2, 5, 10, 30, 60].find((s) => s * W / span >= 60) || 60;
@@ -755,13 +1090,18 @@ function draw() {
 /* ============================== panels ============================== */
 function refreshPanels() {
   if (!S.view) return;
-  $("region-text").textContent = regText(S.region);
-  $("region-detail").textContent = S.region ? `길이 ${Math.round(msOf(S.region[1] - S.region[0]) / 10) * 10} ms` : "";
+  const total = S.regions.reduce((s, r) => s + r[1] - r[0], 0);
+  $("region-text").textContent = S.regions.length ? `${S.regions.length}개 · 총 ${Math.round(msOf(total) / 10) * 10} ms` : (S.status === "reviewed" ? "비프 없음" : "지정 안 됨");
+  $("regions").innerHTML = S.regions.map((r, k) => `<span class="chip${k === S.sel ? " on" : ""}" data-k="${k}"><b>#${k + 1}</b> ${regStr(r)} <span class="muted">${Math.round(msOf(r[1] - r[0]) / 10) * 10}ms</span><button type="button" class="x" data-del="${k}" aria-label="구간 ${k + 1} 삭제">×</button></span>`).join("");
+  $("regions").querySelectorAll(".chip").forEach((c) => (c.onclick = (e) => { if (e.target.dataset.del != null) { pushUndo(); S.regions.splice(+e.target.dataset.del, 1); S.sel = Math.min(S.sel, S.regions.length - 1); changed(); return; } selectRegion(+c.dataset.k); }));
   document.querySelectorAll("#status-seg button").forEach((b) => b.classList.toggle("on", b.dataset.st === S.status));
-  $("btn-play-seg").disabled = !S.region; $("btn-cut").disabled = !S.region;
+  $("btn-play-seg").disabled = !S.regions.length; $("btn-cut").disabled = !S.regions.length; $("btn-del-region").disabled = S.sel < 0;
+  const who = assigneeOf(S.files[S.idx]?.rel);
+  $("file-owner").innerHTML = WS.kind === "project" ? (who ? `<span class="badge" style="background:${colorOf(who)}">담당 ${esc(nameOf(who))}</span>` : `<span class="muted">담당 없음</span>`) : "";
   const dirty = isDirty();
   $("btn-save").classList.toggle("dirty", dirty); $("btn-save").textContent = dirty ? "💾 저장 •" : "💾 저장";
   if (dirty) setSave("저장하지 않은 변경이 있습니다", true);
+  $("btn-undo-save").disabled = !(S.history || []).some((h) => h.action === "저장");
   updateStatus();
 }
 function updateStatus() {
@@ -770,20 +1110,27 @@ function updateStatus() {
   $("status").textContent = `${S.hoverX >= 0 ? `마우스 ${(Math.floor(s / step10() + 1e-6) / 100).toFixed(2)}s · 100ms 칸 #${i} · ` : ""}${S.view.sr} Hz · ${S.view.chans.length}ch · 길이 ${(S.view.n / S.view.sr).toFixed(2)}s`;
 }
 const setSave = (t, warn = false) => { $("save-state").textContent = t; $("save-state").style.color = warn ? "var(--warn)" : ""; };
+function selectRegion(k) {
+  if (k < 0 || k >= S.regions.length) return;
+  S.sel = k; const r = S.regions[k];
+  if (r[0] < S.v0 || r[1] > S.v1) { const span = Math.max(S.v1 - S.v0, (r[1] - r[0]) * 1.5); const c = (r[0] + r[1]) / 2; setView(c - span / 2, c + span / 2); }
+  refreshPanels(); draw();
+}
 
-async function loadHistory() {
+function loadHistory() {
   if (!S.view) return;
   const f = S.files[S.idx].rel;
   S.history = [...(fileDocs.get(f)?.history || [])].reverse();
-  renderHistory();
+  renderHistory(); refreshPanels();
 }
 function renderHistory() {
   const ed = S.histEdit; $("hist-tools").hidden = !ed; $("btn-hist-edit").hidden = ed;
   $("history").innerHTML = S.history.length ? S.history.map((a) => {
+    const who = WS.kind === "project" && a.user_id ? ` · <span style="color:${colorOf(a.user_id)}">${esc(a.user_name || nameOf(a.user_id))}</span>` : "";
     const body = a.action === "저장"
       ? `<div class="chg">${esc(a.before || "").replace(/\n/g, "<br>")}</div><div class="chg to">→ ${esc(a.after || "").replace(/\n/g, "<br>→ ")}</div>`
-      : `${esc(a.action)}${a.before || a.after ? `: ${a.before ? esc(a.before) + " → " : ""}${esc(a.after || "")}` : ""}`;
-    return `<li>${ed ? `<input type="checkbox" class="hc" value="${a.id}" aria-label="기록 선택">` : ""}<div><span class="t">${esc(a.ts)} · ${esc(a.action)}</span>${a.action === "저장" ? body : ""}${a.action !== "저장" ? `<div>${body}</div>` : ""}</div></li>`;
+      : `<div>${esc(a.action)}${a.before || a.after ? `: ${a.before ? esc(a.before) + " → " : ""}${esc(a.after || "")}` : ""}</div>`;
+    return `<li>${ed ? `<input type="checkbox" class="hc" value="${esc(a.id)}" aria-label="기록 선택">` : ""}<div><span class="t">${esc(a.ts)} · ${esc(a.action)}${who}</span>${body}</div></li>`;
   }).join("") : `<li class="muted">아직 저장한 기록이 없습니다</li>`;
   $("history").querySelectorAll(".hc").forEach((c) => (c.onchange = histCount)); histCount();
 }
@@ -800,22 +1147,38 @@ $("btn-hist-all").onclick = () => {
 };
 $("btn-hist-del").onclick = async () => {
   const ids = [...$("history").querySelectorAll(".hc:checked")].map((c) => c.value);
-  if (!ids.length || !(await ask("저장 기록 삭제", `선택한 기록 ${ids.length}건을 삭제할까요?\n되돌릴 수 없고 엑셀·CSV에서도 빠집니다.\n(비프 구간·메모·상태는 바뀌지 않습니다)`, "삭제"))) return;
-  const rel = S.files[S.idx].rel, doc = fileDocs.get(rel), drop = new Set(ids);
-  if (doc) {
-    const next = { ...doc, history: (doc.history || []).filter((h) => !drop.has(h.id)) };
-    try { await retry(async () => (await fileRef(S.me.id, S.folder, rel)).set(next)); fileDocs.set(rel, next); toast(`기록 ${ids.length}건 삭제됨`); }
-    catch (e) { toast(dbMsg(e)); }
-  }
+  if (!ids.length || (await ask("저장 기록 삭제", `선택한 기록 ${ids.length}건을 삭제할까요?\n되돌릴 수 없고 엑셀·CSV에서도 빠집니다.\n(비프 구간·메모·상태는 바뀌지 않습니다)`, "삭제")) !== "yes") return;
+  const rel = S.files[S.idx].rel, drop = new Set(ids);
+  try {
+    const ref = await fileRefW(rel), sn = await retry(() => ref.get());
+    if (sn.exists) { const doc = plain(sn.data()); doc.history = (doc.history || []).filter((h) => !drop.has(h.id)); await retry(() => ref.set(doc)); doc.label = normLabel(doc.label); fileDocs.set(rel, doc); }
+    toast(`기록 ${ids.length}건 삭제됨`);
+  } catch (e) { toast(dbMsg(e)); }
   S.histEdit = false; loadHistory();
+};
+$("btn-undo-save").onclick = async () => {
+  if (!S.view) return;
+  const rel = S.files[S.idx].rel, last = [...(fileDocs.get(rel)?.history || [])].filter((h) => h.action === "저장").pop();
+  if (!last) { toast("되돌릴 저장이 없습니다."); return; }
+  const by = WS.kind === "project" ? ` (${last.user_name || nameOf(last.user_id)})` : "";
+  if ((await ask("마지막 저장 취소", `${last.ts}${by} 저장을 취소하고 그 전 상태로 되돌릴까요?\n그 저장 기록도 지워집니다.${isDirty() ? "\n저장하지 않은 지금 변경도 사라집니다." : ""}\n\n취소되는 내용:\n${last.after}`, "되돌리기")) !== "yes") return;
+  try {
+    const r = await undoLastSave(rel);
+    if (!r) { toast("되돌릴 저장이 없습니다."); return; }
+    applySaved(r.label); S.undo = []; S.redo = []; loadHistory(); renderFiles(); draw();
+    setSave(`${r.undone.ts} 저장을 취소했습니다`);
+  } catch (e) { toast(dbMsg(e)); }
 };
 
 /* ============================== open / save ============================== */
-const stateJSON = () => JSON.stringify({ r: S.region, s: S.status, m: S.memo });
+const stateJSON = () => JSON.stringify({ r: S.regions, s: S.status, m: S.memo });
 const isDirty = () => !!S.view && S.saved !== null && stateJSON() !== S.saved;
 function applySaved(l) {
-  S.region = l && l.start_sample != null ? [l.start_sample, l.end_sample] : null;
+  l = normLabel(l);
+  S.regions = l ? l.regions.map((r) => [r.start_sample, r.end_sample]) : [];
+  S.sel = S.regions.length ? 0 : -1;
   S.status = labelStatus(l); S.memo = l ? l.memo || "" : ""; $("memo").value = S.memo;
+  S.loadedStamp = l?.updated_at || null;
   S.saved = stateJSON();
 }
 async function openFile(i, skipAsk = false) {
@@ -839,58 +1202,67 @@ async function openFile(i, skipAsk = false) {
   S.view = V; S.undo = []; S.redo = []; S.histEdit = false; A.buffer = null;
   const l = myLabels.get(f.rel);
   applySaved(l);
-  S.v0 = 0; S.v1 = V.n; S.cursor = 0;
+  S.v0 = 0; S.v1 = V.n;
   buildSpecImage(); showEmpty(); resize(); refreshPanels();
-  setSave(l ? `마지막 저장 ${l.updated_at}` : "아직 저장한 적 없음");
+  setSave(l ? `마지막 저장 ${l.updated_at}${WS.kind === "project" && l.updated_by ? ` (${nameOf(l.updated_by)})` : ""}` : "아직 저장한 적 없음");
   $("files").querySelector("li.active")?.scrollIntoView({ block: "nearest" });
-  S.me.last_file = f.rel; putUser(S.me);
+  S.me.last_file = f.rel; putUser(S.me).catch(() => {});
+  setPresence(f.rel);
   loadHistory();
 }
 /** 저장 = checkpoint. Only here do labels change and a history row get written. */
 async function save() {
   if (!S.view || S.idx < 0) return;
-  const V = S.view, rel = S.files[S.idx].rel, reg = S.region;
+  const V = S.view, rel = S.files[S.idx].rel;
+  const f = { status: S.status, memo: S.memo, sample_rate: V.sr, num_samples: V.n, sha256: V.sha, file_duration_s: Math.round(V.n / V.sr * 1000) / 1000,
+    regions: S.regions.map((r) => ({ start_sample: r[0], end_sample: r[1], start_s: Math.floor(r[0] * 100 / V.sr + 1e-6) / 100, end_s: Math.floor(r[1] * 100 / V.sr + 1e-6) / 100 })) };
   try {
-    const r = await commitLabel(S.me.id, S.folder, rel, {
-      status: S.status, start_sample: reg ? reg[0] : null, end_sample: reg ? reg[1] : null,
-      start_s: reg ? Math.floor(reg[0] * 100 / V.sr + 1e-6) / 100 : null, end_s: reg ? Math.floor(reg[1] * 100 / V.sr + 1e-6) / 100 : null,
-      memo: S.memo, sample_rate: V.sr, num_samples: V.n, sha256: V.sha, file_duration_s: Math.round(V.n / V.sr * 1000) / 1000 });
+    let r = await commitLabel(rel, f, { expect: S.loadedStamp });
+    if (r?.conflict) {
+      const c = r.conflict.label, a = await ask("다른 사람이 먼저 저장했습니다", `${nameOf(c.updated_by)}님이 ${c.updated_at}에 이 파일을 저장했습니다.\n그 사람 내용: ${regionsText(c.regions)} · ${STATUS_NAME[labelStatus(c)]}\n\n내 변경으로 덮어쓸까요?`, "내 것으로 덮어쓰기", "그 사람 것 불러오기");
+      if (a === "alt") { applySaved(c); refreshPanels(); draw(); loadHistory(); setSave("다른 사람이 저장한 내용을 불러왔습니다"); return; }
+      if (a !== "yes") return;
+      r = await commitLabel(rel, f, { force: true });
+    }
     if (!r) { S.saved = stateJSON(); refreshPanels(); setSave("바뀐 내용이 없습니다"); return; }
-    if (r.label) myLabels.set(rel, r.label); else myLabels.delete(rel);
-    if (S.view === V) { S.saved = stateJSON(); refreshPanels(); setSave(`저장됨 ${now()} (${S.me.id})`); loadHistory(); }
-    renderFiles();
+    if (S.view === V) { S.loadedStamp = r.label?.updated_at || null; S.saved = stateJSON(); setSave(`저장됨 ${now()} (${S.me.id})`); loadHistory(); }
+    renderFiles(); renderProjPanel();
   } catch (e) { setSave("저장 실패: " + dbMsg(e), true); }
 }
 window.addEventListener("beforeunload", (e) => { if (isDirty()) { e.preventDefault(); e.returnValue = ""; } });
+window.addEventListener("pagehide", () => { if (WS.kind === "project" && S.me && DB) DB.doc(`projects/${WS.pid}/presence/${S.me.id}`).set({ uid: S.me.id, file: null, ts: now(), t: Date.now() }).catch(() => {}); });
 
 /* ============================== editing ============================== */
-const snapshot = () => JSON.stringify(S.region);
+const snapshot = () => JSON.stringify({ r: S.regions, k: S.sel });
 function pushUndo() { S.undo.push(snapshot()); if (S.undo.length > 200) S.undo.shift(); S.redo = []; }
-function changed() { if (S.status === "none") S.status = "draft"; refreshPanels(); draw(); }
-const undo = () => { if (S.undo.length) { S.redo.push(snapshot()); S.region = JSON.parse(S.undo.pop()); changed(); } };
-const redo = () => { if (S.redo.length) { S.undo.push(snapshot()); S.region = JSON.parse(S.redo.pop()); changed(); } };
+function restore(sn) { const d = JSON.parse(sn); S.regions = d.r; S.sel = d.k; }
+function changed() { if (S.status === "none" && S.regions.length) S.status = "draft"; refreshPanels(); draw(); }
+const undo = () => { if (S.undo.length) { S.redo.push(snapshot()); restore(S.undo.pop()); changed(); } };
+const redo = () => { if (S.redo.length) { S.undo.push(snapshot()); restore(S.redo.pop()); changed(); } };
 function shift(which, dMs) {
-  if (!S.region) return; pushUndo();
-  const d = Math.round(dMs * S.view.sr / 1000), r = [...S.region], st = Math.max(1, rint(step10()));
+  if (S.sel < 0) return; pushUndo();
+  const d = Math.round(dMs * S.view.sr / 1000), r = [...S.regions[S.sel]], st = Math.max(1, rint(step10()));
   if (which === 0) r[0] = toGrid(Math.max(0, Math.min(r[1] - st, r[0] + d))); else r[1] = Math.min(nS(), Math.max(r[0] + st, toGrid(r[1] + d)));
-  S.region = r; changed();
+  S.regions[S.sel] = r; normalizeRegions(r); changed();
 }
+function deleteSelected() { if (S.sel < 0) return; pushUndo(); S.regions.splice(S.sel, 1); S.sel = Math.min(S.sel, S.regions.length - 1); changed(); }
+function cycleRegion(d) { if (!S.regions.length) return; selectRegion(((S.sel < 0 ? (d > 0 ? -1 : 0) : S.sel) + d + S.regions.length) % S.regions.length); }
 function setStatus(st) { if (!S.view) return; S.status = st; refreshPanels(); }
 document.querySelectorAll("#status-seg button").forEach((b) => (b.onclick = () => setStatus(b.dataset.st)));
 let drag = null;
+const hitEdge = (x, tol) => { const order = S.sel >= 0 ? [S.sel, ...S.regions.keys()] : [...S.regions.keys()]; for (const k of order) { const r = S.regions[k]; if (Math.abs(x - xOf(r[0])) <= tol) return [k, 0]; if (Math.abs(x - xOf(r[1])) <= tol) return [k, 1]; } return null; };
+const hitInside = (x) => S.regions.findIndex((r) => x > xOf(r[0]) && x < xOf(r[1]));
 cv.addEventListener("contextmenu", (e) => e.preventDefault());
 cv.addEventListener("pointerdown", (ev) => {
   if (!S.view || ev.button !== 0) return;
   const r = cv.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top, rg = regionAt(y);
   cv.setPointerCapture(ev.pointerId);
   if (rg === "axis" || !rg) return;
-  const snap = snapshot();
-  if (S.region) {
-    const xa = xOf(S.region[0]), xb = xOf(S.region[1]), tol = ev.pointerType === "touch" ? 14 : 6;
-    if (Math.abs(x - xa) <= tol || Math.abs(x - xb) <= tol) { drag = { mode: "edge", x0: x, side: Math.abs(x - xa) <= Math.abs(x - xb) ? 0 : 1, snap, moved: false }; return; }
-    if (x > xa && x < xb) { drag = { mode: "move", x0: x, s0: sOf(x), r0: [...S.region], snap, moved: false }; return; }
-  }
-  drag = { mode: "create", x0: x, anchor: clampS(sOf(x)), snap, moved: false };
+  const snap = snapshot(), edge = hitEdge(x, ev.pointerType === "touch" ? 14 : 6);
+  if (edge) { S.sel = edge[0]; drag = { mode: "edge", x0: x, k: edge[0], side: edge[1], snap, moved: false }; refreshPanels(); return; }
+  const inside = hitInside(x);
+  if (inside >= 0) { S.sel = inside; drag = { mode: "move", x0: x, s0: sOf(x), k: inside, r0: [...S.regions[inside]], snap, moved: false }; refreshPanels(); draw(); return; }
+  drag = { mode: "create", x0: x, anchor: clampS(sOf(x)), k: -1, snap, moved: false };
 });
 cv.addEventListener("pointermove", (ev) => {
   if (!S.view) return;
@@ -899,13 +1271,17 @@ cv.addEventListener("pointermove", (ev) => {
   if (drag) {
     const s = clampS(sOf(Math.max(0, Math.min(W, x))));
     if (Math.abs(x - drag.x0) > 3) drag.moved = true;
-    if (drag.mode === "edge" && drag.moved) { const rr = [...S.region], st = Math.max(1, rint(step10())); if (drag.side === 0) rr[0] = Math.min(toGrid(s), rr[1] - st); else rr[1] = Math.max(toGrid(s), rr[0] + st); S.region = [Math.max(0, rr[0]), Math.min(nS(), rr[1])]; }
-    else if (drag.mode === "move" && drag.moved) { const len = drag.r0[1] - drag.r0[0], st = toGrid(Math.max(0, Math.min(nS() - len, drag.r0[0] + sOf(x) - drag.s0))); S.region = [st, Math.min(nS(), st + len)]; }
-    else if (drag.mode === "create" && drag.moved) { const a = drag.anchor; S.region = minSpan([toGrid(Math.min(a, s)), toGrid(Math.max(a, s))]); }
+    if (drag.mode === "edge" && drag.moved) { const rr = [...S.regions[drag.k]], st = Math.max(1, rint(step10())); if (drag.side === 0) rr[0] = Math.max(0, Math.min(toGrid(s), rr[1] - st)); else rr[1] = Math.min(nS(), Math.max(toGrid(s), rr[0] + st)); S.regions[drag.k] = rr; }
+    else if (drag.mode === "move" && drag.moved) { const len = drag.r0[1] - drag.r0[0], st = toGrid(Math.max(0, Math.min(nS() - len, drag.r0[0] + sOf(x) - drag.s0))); S.regions[drag.k] = [st, Math.min(nS(), st + len)]; }
+    else if (drag.mode === "create" && drag.moved) {
+      const reg = minSpan([toGrid(Math.min(drag.anchor, s)), toGrid(Math.max(drag.anchor, s))]);
+      if (drag.k < 0) { S.regions.push(reg); drag.k = S.regions.length - 1; } else S.regions[drag.k] = reg;
+      S.sel = drag.k;
+    }
     refreshPanels();
   } else {
     const rg = regionAt(y); let cur = "crosshair";
-    if (S.region && rg && rg !== "axis") { const xa = xOf(S.region[0]), xb = xOf(S.region[1]); if (Math.abs(x - xa) <= 6 || Math.abs(x - xb) <= 6) cur = "ew-resize"; else if (x > xa && x < xb) cur = "grab"; }
+    if (rg && rg !== "axis") { if (hitEdge(x, 6)) cur = "ew-resize"; else if (hitInside(x) >= 0) cur = "grab"; }
     cv.style.cursor = cur; updateStatus();
   }
   draw();
@@ -913,8 +1289,9 @@ cv.addEventListener("pointermove", (ev) => {
 cv.addEventListener("pointerleave", () => { if (!drag) { S.hoverX = -1; draw(); updateStatus(); } });
 cv.addEventListener("pointerup", () => {
   if (!drag) return;
-  if (!drag.moved && drag.mode !== "edge") S.region = centered(sOf(drag.x0));
-  if (snapshot() !== drag.snap) { S.undo.push(drag.snap); S.redo = []; changed(); }
+  if (!drag.moved && drag.mode === "create") { S.regions.push(centered(sOf(drag.x0))); S.sel = S.regions.length - 1; }
+  if (S.sel >= 0) normalizeRegions(S.regions[S.sel]);
+  if (snapshot() !== drag.snap && JSON.stringify(JSON.parse(drag.snap).r) !== JSON.stringify(S.regions)) { S.undo.push(drag.snap); S.redo = []; changed(); }
   drag = null; refreshPanels(); draw();
 });
 cv.addEventListener("wheel", (ev) => {
@@ -948,7 +1325,7 @@ function play(from, to = null) {
 }
 function stop(redraw = true) { if (A.src) { A.src.onended = null; try { A.src.stop(); } catch (e) {} A.src = null; } A.playing = false; S.playEnd = null; if (redraw) tick(); }
 function playAll() { if (!S.view) return; if (A.playing && S.playEnd == null) { stop(); return; } play(0); }  // whole file, start to end
-function playSeg() { if (!S.region) return; if (A.playing && S.playEnd != null) { stop(); return; } play(S.region[0], S.region[1]); }
+function playSeg() { if (!S.regions.length) return; if (A.playing && S.playEnd != null) { stop(); return; } const r = S.regions[Math.max(0, S.sel)]; play(r[0], r[1]); }
 function tick() {
   $("btn-play-all").classList.toggle("on", A.playing && S.playEnd == null); $("btn-play-seg").classList.toggle("on", A.playing && S.playEnd != null);
   if (!A.playing || !S.view) { draw(); return; }
@@ -959,8 +1336,8 @@ function tick() {
 /* ============================== keys & buttons ============================== */
 function nextFile(d) { const vis = [...$("files").querySelectorAll("li")].map((li) => +li.dataset.idx), p = vis.indexOf(S.idx), t = p < 0 ? vis[0] : vis[p + d]; if (t !== undefined) openFile(t); }
 async function reviewNext() {
-  if (!S.region && (await ask("비프 없음으로 검수", "비프 구간을 지정하지 않았습니다. 이 파일을 '비프 없음'으로 검수 완료할까요?", "검수 완료")) !== "yes") return;
-  S.status = "reviewed"; refreshPanels(); await save(); nextFile(1);
+  if (!S.regions.length && (await ask("비프 없음으로 검수", "비프 구간을 지정하지 않았습니다. 이 파일을 '비프 없음'으로 검수 완료할까요?", "검수 완료")) !== "yes") return;
+  S.status = "reviewed"; refreshPanels(); await save(); if (!isDirty()) nextFile(1);
 }
 function toggleBig() { S.big = !S.big; $("wrap").classList.toggle("big", S.big); $("btn-big").textContent = S.big ? "스펙트로그램 작게 보기" : "스펙트로그램 크게 보기"; $("btn-big").classList.toggle("on", S.big); }
 window.addEventListener("keydown", async (ev) => {
@@ -970,7 +1347,7 @@ window.addEventListener("keydown", async (ev) => {
   if (c && k === "KeyZ") { ev.preventDefault(); ev.shiftKey ? redo() : undo(); return; }
   if (c && k === "KeyY") { ev.preventDefault(); redo(); return; }
   if (c || ev.altKey) return;
-  const m = { Space: playAll, Enter: playSeg, Escape: () => stop(),
+  const m = { Space: playAll, Enter: playSeg, Escape: () => stop(), Tab: () => cycleRegion(ev.shiftKey ? -1 : 1), Delete: deleteSelected, Backspace: deleteSelected,
     BracketLeft: () => shift(0, -st), BracketRight: () => shift(0, st), Semicolon: () => shift(1, -st), Quote: () => shift(1, st),
     Equal: () => zoom(0.5), Minus: () => zoom(2), KeyF: () => setView(0, nS()), KeyB: toggleBig, KeyT: toggleTheme, KeyR: reviewNext,
     KeyN: () => nextFile(1), ArrowDown: () => nextFile(1), KeyP: () => nextFile(-1), ArrowUp: () => nextFile(-1) };
@@ -979,7 +1356,7 @@ window.addEventListener("keydown", async (ev) => {
 const on = (id, fn) => ($(id).onclick = () => { if (S.view) fn(); });
 on("btn-play-all", playAll); on("btn-play-seg", playSeg); $("btn-stop").onclick = () => stop();
 on("btn-zin", () => zoom(0.5)); on("btn-zout", () => zoom(2)); on("btn-fit", () => setView(0, nS())); $("btn-big").onclick = toggleBig;
-on("btn-save", save); on("btn-review", reviewNext); on("btn-cut", cutCurrent);
+on("btn-save", save); on("btn-review", reviewNext); on("btn-cut", cutCurrent); on("btn-del-region", deleteSelected);
 $("gain").onchange = (e) => { S.gain = +e.target.value; draw(); };
 $("memo").oninput = () => { if (!S.view) return; S.memo = $("memo").value; if (S.status === "none" && S.memo) S.status = "draft"; refreshPanels(); };
 $("btn-help").onclick = () => $("dlg-help").showModal();
@@ -994,15 +1371,13 @@ async function saveFile(filename, data) {
 }
 
 /* ============================== cut clips ============================== */
-const clipName = (rel, s, e) => `${rel.replace(/\.wav$/i, "").replace(/[\\/]/g, "__")}__${fl2(s)}-${fl2(e)}s.wav`;
+const clipName = (rel, k, s, e) => `${rel.replace(/\.wav$/i, "").replace(/[\\/]/g, "__")}__r${k}_${fl2(s)}-${fl2(e)}s.wav`;
 async function cutCurrent() {
-  if (!S.region) return;
+  if (!S.regions.length) return;
   if (!window.JSZip) { toast("압축 라이브러리를 불러오지 못했습니다. 새로고침하세요."); return; }
-  const V = S.view, rel = S.files[S.idx].rel, s = gridSec(S.region[0]), e = gridSec(S.region[1]);
-  const zip = new JSZip(), name = clipName(rel, s, e);
-  zip.file(name, encodeWav(V.chans, V.sr, V.tag, V.bits, S.region[0], S.region[1]));
-  zip.file("clips.csv", toCsv(["clip", "file", "start_s", "end_s", "duration_ms", "sample_rate", "status", "memo", "saved"],
-    [[name, rel, s, e, Math.round((e - s) * 1000), V.sr, STATUS_NAME[S.status], S.memo, isDirty() ? "저장 전" : "저장됨"]]));
+  const V = S.view, rel = S.files[S.idx].rel, zip = new JSZip(), rows = [];
+  S.regions.forEach((r, k) => { const s = gridSec(r[0]), e = gridSec(r[1]), name = clipName(rel, k + 1, s, e); zip.file(name, encodeWav(V.chans, V.sr, V.tag, V.bits, r[0], r[1])); rows.push([name, rel, k + 1, s, e, Math.round((e - s) * 1000), V.sr, STATUS_NAME[S.status], S.memo, isDirty() ? "저장 전" : "저장됨"]); });
+  zip.file("clips.csv", toCsv(["clip", "file", "region_no", "start_s", "end_s", "duration_ms", "sample_rate", "status", "memo", "saved"], rows));
   await saveFile(`beep_clip_${S.me.id}_${stamp()}.zip`, await zip.generateAsync({ type: "blob" }));
 }
 async function cutAll() {
@@ -1010,73 +1385,85 @@ async function cutAll() {
   if (!S.folder) { $("clip-result").textContent = "먼저 WAV 폴더를 선택하세요 (오디오를 읽어야 자를 수 있습니다)."; return; }
   if (!window.JSZip) { $("clip-result").textContent = "압축 라이브러리를 불러오지 못했습니다. 새로고침하세요."; return; }
   const reviewedOnly = $("exp-reviewed").checked;
-  const todo = S.files.map((f) => [f, myLabels.get(f.rel)]).filter(([, l]) => l && l.start_sample != null && (!reviewedOnly || labelStatus(l) === "reviewed"));
+  const todo = S.files.map((f) => [f, myLabels.get(f.rel)]).filter(([, l]) => l && l.regions.length && (!reviewedOnly || labelStatus(l) === "reviewed"));
   if (!todo.length) { $("clip-result").textContent = "비프 구간을 저장한 파일이 없습니다."; return; }
   const zip = new JSZip(), rows = []; let n = 0;
   for (const [f, l] of todo) {
     $("clip-result").textContent = `자르는 중… ${++n} / ${todo.length}`;
     try {
-      const d = decodeWav(await f.file.arrayBuffer()), name = clipName(f.rel, l.start_s, l.end_s);
-      zip.file(name, encodeWav(d.chans, d.sr, d.tag, d.bits, Math.min(l.start_sample, d.n), Math.min(l.end_sample, d.n)));
-      rows.push([name, f.rel, l.start_s, l.end_s, Math.round((l.end_s - l.start_s) * 1000), d.sr, STATUS_NAME[labelStatus(l)], l.memo || ""]);
-    } catch (e) { rows.push(["(실패)", f.rel, l.start_s, l.end_s, "", "", "", e.message]); }
+      const d = decodeWav(await f.file.arrayBuffer());
+      l.regions.forEach((r, k) => { const name = clipName(f.rel, k + 1, r.start_s, r.end_s); zip.file(name, encodeWav(d.chans, d.sr, d.tag, d.bits, Math.min(r.start_sample, d.n), Math.min(r.end_sample, d.n))); rows.push([name, f.rel, k + 1, r.start_s, r.end_s, Math.round((r.end_s - r.start_s) * 1000), d.sr, STATUS_NAME[labelStatus(l)], l.memo || ""]); });
+    } catch (e) { rows.push(["(실패)", f.rel, "", "", "", "", "", "", e.message]); }
   }
-  zip.file("clips.csv", toCsv(["clip", "file", "start_s", "end_s", "duration_ms", "sample_rate", "status", "memo"], rows));
-  $("clip-result").textContent = `${todo.length}개 구간을 잘랐습니다. 저장 창을 확인하세요.`;
-  if (await saveFile(`beep_clips_${S.me.id}_${stamp()}.zip`, await zip.generateAsync({ type: "blob" }))) await log(S.me.id, "내보내기", { detail: `구간 오디오 ${todo.length}개 (zip)` });
+  zip.file("clips.csv", toCsv(["clip", "file", "region_no", "start_s", "end_s", "duration_ms", "sample_rate", "status", "memo"], rows));
+  $("clip-result").textContent = `${todo.length}개 파일의 구간 ${rows.length}개를 잘랐습니다. 저장 창을 확인하세요.`;
+  if (await saveFile(`beep_clips_${S.me.id}_${stamp()}.zip`, await zip.generateAsync({ type: "blob" }))) await log(S.me.id, "내보내기", { detail: `구간 오디오 ${rows.length}개 (zip)` });
 }
 
 /* ============================== export ============================== */
-const LABEL_HEADERS = ["번호", "파일", "작업자 ID", "작업자 이름", "상태", "비프 여부", "비프 구간", "시작(초)", "끝(초)", "길이(ms)", "메모",
-  "최초 작업 일시", "최종 수정 일시", "샘플레이트(Hz)", "파일 길이(초)", "시작 샘플", "끝 샘플", "SHA-256"];
-const LABEL_KEYS = [null, "file", "user_id", "display_name", "status", null, "region", "start_s", "end_s", "duration_ms", "memo",
-  "created_at", "updated_at", "sample_rate", "file_duration_s", "start_sample", "end_sample", "sha256"];
+const LABEL_HEADERS = ["번호", "파일", "담당자", "작업자 ID", "작업자 이름", "상태", "비프 여부", "구간 수", "구간 목록", "시작(초)", "끝(초)", "총 비프 길이(ms)", "메모",
+  "최초 작업 일시", "최종 수정 일시", "샘플레이트(Hz)", "파일 길이(초)", "SHA-256"];
+const LABEL_KEYS = ["no", "file", "assignee", "user_id", "display_name", "status", null, "n_regions", "region", "start_s", "end_s", "total_ms", "memo",
+  "created_at", "updated_at", "sample_rate", "file_duration_s", "sha256"];
 const AUDIT_HEADERS = ["번호", "일시", "작업자 ID", "작업자 이름", "파일", "동작", "변경 전", "변경 후", "비고"], SOURCE = "출처 파일";
-const ACTION_FILL = { "저장": "DDEBF7", "비밀번호 변경": "F2F2F2", "예전 기록 가져오기": "F2F2F2", "로그인": "F2F2F2", "로그아웃": "F2F2F2", "저장 후 로그아웃": "F2F2F2", "아이디 생성": "F2F2F2", "데이터 폴더 변경": "FFE699", "내보내기": "F2F2F2", "엑셀 합치기": "F2F2F2", "초기화": "FCE4D6" };
+const ACTION_FILL = { "저장": "DDEBF7", "비밀번호 변경": "F2F2F2", "예전 기록 가져오기": "F2F2F2", "로그인": "F2F2F2", "로그아웃": "F2F2F2", "저장 후 로그아웃": "F2F2F2", "아이디 생성": "F2F2F2",
+  "데이터 폴더 변경": "FFE699", "내보내기": "F2F2F2", "엑셀 합치기": "F2F2F2", "초기화": "FCE4D6", "공동 작업 만들기": "E2EFDA", "참여자 초대": "E2EFDA", "참여자 빼기": "FCE4D6", "작업 배정": "FFF2CC", "파일 목록 갱신": "FFF2CC" };
 const STATUS_FILL = { "검수 완료": "E2EFDA", "작업 중": "FFF2CC", "미작업": "F2F2F2", "일치": "E2EFDA", "불일치": "FCE4D6" };
 const RULE_ROWS = [
-  ["라벨 규칙", "샘플(파일)마다 비프 구간은 최대 1개이며 길이 제한은 없습니다. 구간 경계는 10 ms 단위(소수 둘째 자리 초)로 기록합니다. 구간은 원본 오디오를 바꾸지 않고 표시만 합니다. 검수 완료인데 구간이 없으면 '비프 없음'입니다."],
+  ["라벨 규칙", "한 파일에 비프 구간을 여러 개 지정할 수 있고 길이 제한은 없습니다. 겹치는 구간은 하나로 합칩니다. 경계는 10 ms 단위(소수 둘째 자리 초)로 기록합니다. 원본 오디오는 바꾸지 않습니다. 검수 완료인데 구간이 없으면 '비프 없음'입니다."],
+  ["구간 목록", "라벨 결과는 파일마다 한 줄이며, 구간이 여러 개면 '구간 목록'에 시작~끝(초)을 쉼표로 나열합니다. 시작(초)은 첫 구간 시작, 끝(초)은 마지막 구간 끝, 총 비프 길이는 모든 구간 길이의 합입니다."],
   ["상태", "미작업 / 작업 중 / 검수 완료 — 작업자가 직접 지정하고 저장한 값입니다."],
-  ["작업 이력", "작업자가 저장 버튼을 누를 때마다 그 시점까지 바뀐 내용(구간·상태·메모)이 한 줄씩 기록됩니다."],
-  ["작업자 간 일치", "두 작업자 이상이 라벨링한 파일에서 시작·끝 경계 차이가 모두 20 ms 이하면 '일치'."],
-  ["SHA-256", "오디오 파일의 지문 값입니다. 파일 내용이 조금이라도 다르면 값이 달라지며, 합칠 때 사람마다 같은 파일로 작업했는지 확인하는 데 씁니다."],
-  ["로그인 방식", "아이디만으로 로그인합니다. 작업자 ID는 본인 확인을 거친 값이 아닙니다."]];
-const SHEET_HELP = ["시트 설명", "라벨 결과: 작업자별 최종 구간 / 작업 이력: 누가 언제 무엇을 저장했는지 / 작업자 요약: 작업자별 진행 현황 / 파일 현황: 파일별 작업자 간 일치 여부"];
+  ["작업 이력", "저장 버튼을 누를 때마다 그 시점까지 바뀐 내용(구간·상태·메모)이 한 줄씩 기록됩니다. '마지막 저장 취소'로 되돌린 저장은 기록에서도 지워집니다."],
+  ["담당자", "공동 작업에서 방장이 배정한 파일 번호 범위의 담당자입니다. 작업자 ID는 마지막으로 저장한 사람입니다."],
+  ["작업자 간 일치", "같은 파일을 둘 이상이 라벨링했을 때(엑셀 합치기) 구간 수가 같고 모든 시작·끝 차이가 20 ms 이하면 '일치'."],
+  ["SHA-256", "오디오 파일의 지문 값입니다. 파일 내용이 조금이라도 다르면 값이 달라지며, 합칠 때 같은 파일로 작업했는지 확인하는 데 씁니다."],
+  ["로그인 방식", "아이디와 비밀번호로 로그인합니다. 작업자 ID는 같은 팀 안에서의 구분용입니다."]];
+const SHEET_HELP = ["시트 설명", "라벨 결과: 파일별 최종 구간 / 작업 이력: 누가 언제 무엇을 저장했는지 / 작업자 요약: 작업자별 배정·진행 현황 / 파일 현황: 모든 파일의 담당자·상태·작업자 간 일치"];
 
-function decorate(l0, name) {
-  const st = labelStatus(l0), l = { ...l0, display_name: name, status: STATUS_NAME[st], reviewed: st === "reviewed", has_beep: l0.start_sample != null };
-  l.duration_ms = l.has_beep ? Math.round((l.end_s - l.start_s) * 1000) : null;
-  l.region = regionText(l.start_s, l.end_s);
-  l.start_s = l.has_beep ? +fl2(l.start_s) : null; l.end_s = l.has_beep ? +fl2(l.end_s) : null;
-  l.file_duration_s = l.sample_rate ? Math.round(l.num_samples / l.sample_rate * 1000) / 1000 : null;
-  return l;
+function decorate(l0, extra = {}) {
+  const l = normLabel(l0), st = labelStatus(l), rs = l.regions || [];
+  const uid = l.updated_by || l.user_id || S.me.id;
+  return { ...l, ...extra, user_id: uid, display_name: l.updated_by_name || (WS.kind === "project" ? nameOf(uid) : S.me.display_name),
+    status: STATUS_NAME[st], reviewed: st === "reviewed", has_beep: rs.length > 0, n_regions: rs.length,
+    region: rs.length ? regionsText(rs) : "비프 없음", start_s: rs.length ? +fl2(rs[0].start_s) : null, end_s: rs.length ? +fl2(rs[rs.length - 1].end_s) : null,
+    total_ms: rs.length ? rs.reduce((s, r) => s + Math.round((r.end_s - r.start_s) * 1000), 0) : null,
+    file_duration_s: l.sample_rate ? Math.round(l.num_samples / l.sample_rate * 1000) / 1000 : null };
 }
 async function collect(reviewedOnly) {
-  const uid = S.me.id, folder = S.folder || S.me.folder_name;
-  const docs = folder === S.folder ? fileDocs : await loadDocs(folder);
-  let labels = [...docs.values()].filter((d) => d.label).map((d) => d.label);
-  if (S.folder) { const have = new Set(S.files.map((f) => f.rel)); labels = labels.filter((l) => have.has(l.file)); }
-  if (reviewedOnly) labels = labels.filter((l) => labelStatus(l) === "reviewed");
-  labels.sort((a, b) => (a.file < b.file ? -1 : 1));
-  const out = labels.map((l) => decorate(l, S.me.display_name));
-  const audit = [...(S.me.events || []).filter((a) => a.dataset == null || a.dataset === folder),
-    ...[...docs.values()].flatMap((d) => (d.history || []).map((h) => ({ ...h, dataset: d.dataset, file: d.file })))]
-    .map((a) => ({ ...a, user_id: uid, display_name: S.me.display_name }))
-    .sort((a, b) => (a.ts === b.ts ? (a.id < b.id ? -1 : 1) : a.ts < b.ts ? -1 : 1));
-  const files = S.folder ? S.files.map((f) => [f.rel, f.info && !f.info.error ? Math.round(f.info.n / f.info.sr * 1000) / 1000 : null]) : out.map((l) => [l.file, l.file_duration_s]);
-  return { folder, labels: out, audit, users: { [uid]: { display_name: S.me.display_name, created_at: S.me.created_at, last_login: S.me.last_login } }, files };
+  const uid = S.me.id, project = WS.kind === "project", folder = S.folder || S.me.folder_name;
+  let docs = fileDocs;
+  if (!project && folder !== S.folder) { docs = new Map(); for (const x of await loadPersonalDocs(folder)) { x.label = normLabel(x.label); docs.set(x.file, x); } }
+  const order = project && WS.list.length ? WS.list : S.files.length ? S.files.map((f) => f.rel) : [...docs.keys()].sort();
+  const numOf = (rel) => (project ? (WS.index.has(rel) ? WS.index.get(rel) + 1 : null) : order.indexOf(rel) + 1 || null);
+  let labels = [...docs.values()].filter((d) => d.label && (project || !S.folder || order.includes(d.file)));
+  if (reviewedOnly) labels = labels.filter((d) => labelStatus(d.label) === "reviewed");
+  labels = labels.map((d) => decorate(d.label, { file: d.file, no: numOf(d.file), assignee: project ? nameOf(assigneeOf(d.file)) || "" : "" }))
+    .sort((a, b) => (a.no ?? 1e9) - (b.no ?? 1e9) || (a.file < b.file ? -1 : 1));
+  const histories = [...docs.values()].flatMap((d) => (d.history || []).map((h) => ({ ...h, file: d.file, display_name: h.user_name || (project ? nameOf(h.user_id) : S.me.display_name), user_id: h.user_id || uid })));
+  const events = project ? (WS.proj?.events || []).map((e) => ({ ...e, display_name: nameOf(e.user_id) }))
+    : (S.me.events || []).filter((a) => a.dataset == null || a.dataset === folder).map((a) => ({ ...a, user_id: uid, display_name: S.me.display_name }));
+  const audit = [...events, ...histories].sort((a, b) => (a.ts === b.ts ? (a.id < b.id ? -1 : 1) : a.ts < b.ts ? -1 : 1));
+  const info = new Map(S.files.map((f) => [f.rel, f.info && !f.info.error ? Math.round(f.info.n / f.info.sr * 1000) / 1000 : null]));
+  const files = order.map((rel) => ({ rel, no: numOf(rel), dur: info.get(rel) ?? docs.get(rel)?.label?.file_duration_s ?? null, assignee: project ? assigneeOf(rel) : null, doc: docs.get(rel) }));
+  const users = project
+    ? Object.fromEntries((WS.proj?.members || []).map((m) => [m, { display_name: nameOf(m), color: colorOf(m), owner: m === WS.proj.owner, ranges: (WS.proj.ranges || []).filter((r) => r.uid === m).map((r) => `#${r.from}~${r.to}`).join(", ") }]))
+    : { [uid]: { display_name: S.me.display_name, created_at: S.me.created_at, last_login: S.me.last_login } };
+  return { project, folder, name: project ? WS.proj?.name : folder, labels, audit, users, files };
 }
+/** Same file labelled by several people: same region count and every boundary within 20 ms. */
 function agreement(ls) {
-  const b = ls.filter((l) => l.has_beep), mm = (k) => b.length >= 2 ? Math.round(1000 * (Math.max(...b.map((l) => l[k])) - Math.min(...b.map((l) => l[k])))) : null;
-  const ds = mm("start_s"), de = mm("end_s");
-  if (ls.length < 2) return ["—", ds, de];
-  if (b.length && b.length < ls.length) return ["불일치", ds, de];
-  if (!b.length) return ["일치", ds, de];
+  if (ls.length < 2) return ["—", null, null];
+  const sets = ls.map((l) => (l.regions || []).map((r) => [r.start_s, r.end_s]));
+  if (new Set(sets.map((s) => s.length)).size > 1) return ["불일치", null, null];
+  let ds = 0, de = 0;
+  for (let k = 0; k < sets[0].length; k++) { const st = sets.map((s) => s[k][0]), en = sets.map((s) => s[k][1]); ds = Math.max(ds, Math.max(...st) - Math.min(...st)); de = Math.max(de, Math.max(...en) - Math.min(...en)); }
+  ds = Math.round(ds * 1000); de = Math.round(de * 1000);
+  if (!sets[0].length) return ["일치", null, null];
   return [Math.max(ds, de) <= AGREE_TOL_MS ? "일치" : "불일치", ds, de];
 }
 const WIDE = [[0x1100, 0x115f], [0x2e80, 0xa4cf], [0xac00, 0xd7a3], [0xf900, 0xfaff], [0xfe30, 0xfe4f], [0xff00, 0xff60], [0xffe0, 0xffe6]];
 const cw = (v) => Math.max(...String(v ?? "").split("\n").map((line) => [...line].reduce((s, ch) => { const c = ch.codePointAt(0); return s + (WIDE.some(([a, b]) => c >= a && c <= b) ? 2 : 1); }, 0)));
-function table(ws, headers, rows, { widths = {}, wrap = [], fill = null, fmt = {} } = {}) {
+function table(ws, headers, rows, { widths = {}, wrap = [], fill = null, fmt = {}, cellFill = null } = {}) {
   const thin = { style: "thin", color: { argb: "FFBFBFBF" } }, border = { top: thin, left: thin, bottom: thin, right: thin };
   const hr = ws.addRow(headers); hr.height = 30;
   hr.eachCell((c) => { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F3864" } }; c.font = { bold: true, color: { argb: "FFFFFFFF" } }; c.border = border; c.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; });
@@ -1086,34 +1473,45 @@ function table(ws, headers, rows, { widths = {}, wrap = [], fill = null, fmt = {
       const c = row.getCell(j); c.border = border; c.alignment = { vertical: "top", wrapText: wrap.includes(j) };
       if (fmt[headers[j - 1]] && typeof r[j - 1] === "number") c.numFmt = fmt[headers[j - 1]];
       const color = f || (i % 2 === 1 ? "F7F9FC" : null); if (color) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + color } };
+      const cf = cellFill ? cellFill(r, j - 1) : null; if (cf) { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + cf } }; c.font = { bold: true, color: { argb: "FFFFFFFF" } }; }
     }
   });
   headers.forEach((h, j) => { let w = Math.max(cw(h), ...rows.slice(0, 2000).map((r) => cw(r[j]))) + 2; if (widths[h]) w = widths[h]; ws.getColumn(j + 1).width = Math.min(Math.max(w, 8), 60); });
   ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(rows.length, 1) + 1, column: headers.length } };
-  ws.views = [{ state: "frozen", xSplit: 1, ySplit: 1 }];
+  ws.views = [{ state: "frozen", xSplit: 2, ySplit: 1 }];
 }
+const hexNoHash = (c) => (c || "").replace("#", "").toUpperCase() || null;
 async function writeWorkbook(d, title, info, withSource) {
   if (!window.ExcelJS) throw new Error("엑셀 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침하세요.");
-  const wb = new ExcelJS.Workbook(), src = withSource ? [SOURCE] : [];
+  const wb = new ExcelJS.Workbook(), src = withSource ? [SOURCE] : [], colorByName = Object.fromEntries(Object.entries(d.users).map(([, u]) => [u.display_name, u.color]));
   let ws = wb.addWorksheet("라벨 결과");
-  table(ws, [...LABEL_HEADERS, ...src], d.labels.map((l, n) => [...LABEL_HEADERS.map((h, j) => h === "번호" ? n + 1 : h === "비프 여부" ? (l.has_beep ? "있음" : "없음") : l[LABEL_KEYS[j]] ?? null), ...(withSource ? [l.source || ""] : [])]),
-    { widths: { "메모": 40, "SHA-256": 18 }, wrap: [11], fmt: { "시작(초)": "0.00", "끝(초)": "0.00" }, fill: (r) => STATUS_FILL[r[4]] });
+  table(ws, [...LABEL_HEADERS, ...src], d.labels.map((l, n) => [...LABEL_HEADERS.map((h, j) => h === "번호" ? (l.no ?? n + 1) : h === "비프 여부" ? (l.has_beep ? "있음" : "없음") : l[LABEL_KEYS[j]] ?? null), ...(withSource ? [l.source || ""] : [])]),
+    { widths: { "메모": 40, "구간 목록": 46, "SHA-256": 18 }, wrap: [9, 13], fmt: { "시작(초)": "0.00", "끝(초)": "0.00" }, fill: (r) => STATUS_FILL[r[5]],
+      cellFill: (r, j) => (j === 2 && r[2] && colorByName[r[2]] ? hexNoHash(colorByName[r[2]]) : null) });
   ws = wb.addWorksheet("작업 이력");
   table(ws, [...AUDIT_HEADERS, ...src], d.audit.map((a, n) => [n + 1, a.ts, a.user_id || "", a.display_name || a.user_id || "", a.file || "", a.action, a.before || "", a.after || "", a.detail || "", ...(withSource ? [a.source || ""] : [])]),
-    { widths: { "변경 전": 34, "변경 후": 34, "비고": 22 }, wrap: [7, 8, 9], fill: (r) => ACTION_FILL[r[5]] });
+    { widths: { "변경 전": 38, "변경 후": 38, "비고": 26 }, wrap: [7, 8, 9], fill: (r) => ACTION_FILL[r[5]] });
   ws = wb.addWorksheet("작업자 요약");
-  const nFiles = d.files.length, sum = [];
+  const sum = [];
   for (const [uid, u] of Object.entries(d.users)) {
-    const ls = d.labels.filter((l) => l.user_id === uid), durs = ls.map((l) => l.duration_ms).filter((v) => v != null), done = ls.filter((l) => l.reviewed).length;
-    sum.push([uid, u.display_name || uid, u.created_at || "", u.last_login || "", ls.length, done, ls.filter((l) => l.status === "작업 중").length, ls.filter((l) => l.has_beep).length, ls.filter((l) => l.reviewed && !l.has_beep).length,
-      durs.length ? Math.round(durs.reduce((a, b) => a + b) / durs.length) : null, d.audit.filter((a) => a.user_id === uid && a.action === "저장").length, nFiles ? `${done}/${nFiles} (${(100 * done / nFiles).toFixed(1)}%)` : "-"]);
+    const assigned = d.files.filter((f) => f.assignee === uid), worked = d.labels.filter((l) => l.user_id === uid);
+    const base = d.project ? assigned.map((f) => f.doc?.label) : worked;
+    const st = (s) => base.filter((l) => labelStatus(l) === s).length, done = st("reviewed");
+    const durs = worked.map((l) => l.total_ms).filter((v) => v != null), nAll = d.project ? assigned.length : d.files.length;
+    sum.push([uid, u.display_name || uid, d.project ? (u.owner ? "방장" : "참여자") : "", u.ranges || "", d.project ? assigned.length : worked.length, done, st("draft"), d.project ? assigned.length - done - st("draft") : null,
+      worked.filter((l) => l.has_beep).length, worked.reduce((s, l) => s + l.n_regions, 0), durs.length ? Math.round(durs.reduce((a, b) => a + b) / durs.length) : null,
+      d.audit.filter((a) => a.user_id === uid && a.action === "저장").length, nAll ? `${done}/${nAll} (${(100 * done / nAll).toFixed(1)}%)` : "-"]);
   }
-  table(ws, ["작업자 ID", "작업자 이름", "생성 일시", "마지막 로그인", "작업한 파일 수", "검수 완료", "작업 중", "비프 있음", "비프 없음(검수)", "평균 구간 길이(ms)", "저장 횟수", "진행률(검수/전체 파일)"], sum);
+  table(ws, ["작업자 ID", "작업자 이름", "역할", "배정 범위", d.project ? "배정 파일 수" : "작업한 파일 수", "검수 완료", "작업 중", "미작업", "비프 있는 파일", "구간 수 합계", "평균 비프 길이(ms)", "저장 횟수", d.project ? "진행률(검수/배정)" : "진행률(검수/전체)"], sum,
+    { cellFill: (r, j) => (j === 1 && d.users[r[0]]?.color ? hexNoHash(d.users[r[0]].color) : null) });
   ws = wb.addWorksheet("파일 현황");
   const byFile = new Map(); for (const l of d.labels) { if (!byFile.has(l.file)) byFile.set(l.file, []); byFile.get(l.file).push(l); }
-  table(ws, ["파일", "파일 길이(초)", "작업자 수", "검수 완료 작업자", "작업자별 구간", "작업자 간 일치(±20ms)", "시작 최대 차이(ms)", "끝 최대 차이(ms)", "메모 모음"],
-    d.files.map(([f, dur]) => { const ls = byFile.get(f) || [], [v, ds, de] = agreement(ls); return [f, dur, ls.length, ls.filter((l) => l.reviewed).map((l) => l.user_id).join(", "), ls.map((l) => `${l.user_id}: ${l.region} (${l.status})`).join("\n"), v, ds, de, ls.filter((l) => l.memo).map((l) => `${l.user_id}: ${l.memo}`).join("\n")]; }),
-    { widths: { "작업자별 구간": 42, "메모 모음": 40 }, wrap: [5, 9], fill: (r) => STATUS_FILL[r[5]] });
+  table(ws, ["번호", "파일", "파일 길이(초)", "담당자", "상태", "구간 수", "구간 목록", "마지막 저장", "작업자 수", "작업자별 구간", "작업자 간 일치(±20ms)", "시작 최대 차이(ms)", "끝 최대 차이(ms)", "메모 모음"],
+    d.files.map((f) => { const ls = byFile.get(f.rel) || [], [v, ds, de] = agreement(ls), first = ls[0];
+      return [f.no, f.rel, f.dur, f.assignee ? nameOf(f.assignee) : (first?.assignee || ""), first ? (ls.length > 1 ? ls.map((l) => l.status).join(" / ") : first.status) : "미작업", first ? first.n_regions : 0, first ? first.region : "",
+        first ? `${first.updated_at} ${first.display_name}` : "", ls.length, ls.map((l) => `${l.user_id}: ${l.region} (${l.status})`).join("\n"), v, ds, de, ls.filter((l) => l.memo).map((l) => `${l.user_id}: ${l.memo}`).join("\n")]; }),
+    { widths: { "구간 목록": 40, "작업자별 구간": 44, "메모 모음": 40 }, wrap: [7, 10, 14], fill: (r) => STATUS_FILL[r[4]] || STATUS_FILL[r[10]],
+      cellFill: (r, j) => (j === 3 && r[3] && colorByName[r[3]] ? hexNoHash(colorByName[r[3]]) : null) });
   ws = wb.addWorksheet("정보");
   ws.getCell("A1").value = title; ws.getCell("A1").font = { bold: true, size: 14 };
   info.forEach(([k, v], i) => { ws.getCell(i + 3, 1).value = k; ws.getCell(i + 3, 1).font = { bold: true }; const c = ws.getCell(i + 3, 2); c.value = v; c.alignment = { wrapText: true, vertical: "top" }; });
@@ -1127,28 +1525,33 @@ const toCsv = (head, rows) => "﻿" + [head, ...rows].map((r) => r.map(csvCell).
 async function doExport(kind) {
   $("exp-error").textContent = "";
   if (isDirty()) toast("저장하지 않은 변경은 내보내기에 들어가지 않습니다.");
-  const d = await collect($("exp-reviewed").checked), base = `${S.me.id}_${stamp()}`;
+  const d = await collect($("exp-reviewed").checked), base = `${d.project ? "team_" : ""}${S.me.id}_${stamp()}`;
   if (!d.labels.length && kind !== "audit") { $("exp-error").textContent = "내보낼 라벨이 없습니다. 먼저 구간을 지정하고 저장하세요."; return; }
   let ok = false;
   try {
     if (kind === "xlsx") {
-      const info = [["생성 일시", now()], ["내보낸 사람", S.me.id], ["데이터 폴더", d.folder || ""], ["툴 버전", VERSION], ...RULE_ROWS,
-        ["전체 파일 수", d.files.length], ["라벨 수(작업자×파일)", d.labels.length], ["작업자 수", 1], ["작업 이력 수", d.audit.length], SHEET_HELP];
-      ok = await saveFile(`beep_labels_${base}.xlsx`, await writeWorkbook(d, "Beep Labeler 내보내기 정보", info, false));
+      const team = d.project ? [["공동 작업", d.name || ""], ["방장", nameOf(WS.proj.owner)], ["참여자", Object.entries(d.users).map(([u, x]) => `${x.display_name}(${u})${x.ranges ? " " + x.ranges : ""}`).join(", ")], ["공동 작업 파일 수", WS.list.length]] : [];
+      const info = [["생성 일시", now()], ["내보낸 사람", S.me.id], ["데이터 폴더", d.folder || ""], ...team, ["툴 버전", VERSION], ...RULE_ROWS,
+        ["라벨이 있는 파일 수", d.labels.length], ["구간 수 합계", d.labels.reduce((s, l) => s + l.n_regions, 0)], ["작업자 수", Object.keys(d.users).length], ["작업 이력 수", d.audit.length], SHEET_HELP];
+      ok = await saveFile(`beep_labels_${base}.xlsx`, await writeWorkbook(d, d.project ? "Beep Labeler 공동 작업 내보내기" : "Beep Labeler 내보내기 정보", info, false));
     } else if (kind === "labels") {
-      ok = await saveFile(`beep_labels_${base}.csv`, toCsv(["file", "user_id", "user_name", "status", "has_beep", "start_s", "end_s", "duration_ms", "start_sample", "end_sample", "memo", "created_at", "updated_at", "sample_rate", "file_duration_s", "sha256"],
-        d.labels.map((l) => [l.file, l.user_id, l.display_name, l.status, l.has_beep ? 1 : 0, l.start_s, l.end_s, l.duration_ms, l.start_sample, l.end_sample, l.memo, l.created_at, l.updated_at, l.sample_rate, l.file_duration_s, l.sha256])));
+      ok = await saveFile(`beep_labels_${base}.csv`, toCsv(["no", "file", "assignee", "user_id", "user_name", "status", "has_beep", "n_regions", "regions", "first_start_s", "last_end_s", "total_beep_ms", "memo", "created_at", "updated_at", "sample_rate", "file_duration_s", "sha256"],
+        d.labels.map((l) => [l.no, l.file, l.assignee, l.user_id, l.display_name, l.status, l.has_beep ? 1 : 0, l.n_regions, (l.regions || []).map((r) => `${fl2(r.start_s)}-${fl2(r.end_s)}`).join(";"), l.start_s, l.end_s, l.total_ms, l.memo, l.created_at, l.updated_at, l.sample_rate, l.file_duration_s, l.sha256])));
     } else if (kind === "frames") {
       const rows = [];
-      for (const l of d.labels) { const fb = frameBounds(l.num_samples, l.sample_rate); fb.starts.forEach((s, i) => { const e = fb.ends[i], ov = l.has_beep ? Math.max(0, Math.min(e, l.end_sample) - Math.max(s, l.start_sample)) : 0; rows.push([l.file, l.user_id, l.status, i, r6(s / l.sample_rate), r6(e / l.sample_rate), Math.round(1000 * ov / l.sample_rate), ov > 0 ? 1 : 0, l.memo]); }); }
-      ok = await saveFile(`beep_frames_${base}.csv`, toCsv(["file", "user_id", "status", "frame_index", "start_s", "end_s", "overlap_ms", "label", "memo"], rows));
+      for (const l of d.labels) { const fb = frameBounds(l.num_samples, l.sample_rate); fb.starts.forEach((s, i) => { const e = fb.ends[i]; let ov = 0; for (const r of l.regions || []) ov += Math.max(0, Math.min(e, r.end_sample) - Math.max(s, r.start_sample)); rows.push([l.file, l.assignee, l.user_id, l.status, i, r6(s / l.sample_rate), r6(e / l.sample_rate), Math.round(1000 * ov / l.sample_rate), ov > 0 ? 1 : 0, l.memo]); }); }
+      ok = await saveFile(`beep_frames_${base}.csv`, toCsv(["file", "assignee", "user_id", "status", "frame_index", "start_s", "end_s", "overlap_ms", "label", "memo"], rows));
     } else {
-      ok = await saveFile(`beep_audit_${base}.csv`, toCsv(["no", "timestamp", "user_id", "file", "action", "before", "after", "detail"], d.audit.map((a, i) => [i + 1, a.ts, a.user_id, a.file, a.action, a.before, a.after, a.detail])));
+      ok = await saveFile(`beep_audit_${base}.csv`, toCsv(["no", "timestamp", "user_id", "user_name", "file", "action", "before", "after", "detail"], d.audit.map((a, i) => [i + 1, a.ts, a.user_id, a.display_name, a.file, a.action, a.before, a.after, a.detail])));
     }
   } catch (e) { $("exp-error").textContent = "내보내기 실패: " + e.message; return; }
-  if (ok) await log(S.me.id, "내보내기", { detail: `${kind} (검수 완료만: ${$("exp-reviewed").checked ? "예" : "아니오"})` });
+  if (ok) await log(S.me.id, "내보내기", { detail: `${kind}${d.project ? " (공동: " + (d.name || "") + ")" : ""} (검수 완료만: ${$("exp-reviewed").checked ? "예" : "아니오"})` });
 }
-$("btn-export").onclick = () => { $("exp-error").textContent = ""; $("clip-result").textContent = ""; $("dlg-export").showModal(); };
+$("btn-export").onclick = () => {
+  $("exp-error").textContent = ""; $("clip-result").textContent = "";
+  $("exp-scope").textContent = WS.kind === "project" ? `공동 작업 '${WS.proj?.name || ""}'의 모든 참여자 라벨, 담당자, 저장 기록, 메모가 들어갑니다.` : "로그인한 아이디가 저장한 라벨, 저장 기록, 메모가 들어갑니다. 팀원과 비교하려면 각자 받은 엑셀을 아래에서 합치세요.";
+  $("dlg-export").showModal();
+};
 $("exp-xlsx").onclick = () => doExport("xlsx"); $("exp-labels").onclick = () => doExport("labels");
 $("exp-frames").onclick = () => doExport("frames"); $("exp-audit").onclick = () => doExport("audit");
 $("exp-clips").onclick = cutAll;
@@ -1166,23 +1569,28 @@ function sheetRows(ws) {
   ws.eachRow((row, i) => { if (i === 1) return; const o = {}; let any = false; head.forEach((h, j) => { if (!h) return; const v = row.getCell(j).value; if (v != null && v !== "") any = true; o[h] = v; }); if (any) out.push(o); });
   return [head.filter(Boolean), out];
 }
-const NUMERIC = new Set(["start_s", "end_s", "duration_ms", "sample_rate", "file_duration_s", "start_sample", "end_sample"]);
+const NUMERIC = new Set(["no", "start_s", "end_s", "total_ms", "n_regions", "sample_rate", "file_duration_s"]);
+const parseRegions = (t) => [...String(t || "").matchAll(/(\d+(?:\.\d+)?)\s*~\s*(\d+(?:\.\d+)?)/g)].map((m) => ({ start_s: +m[1], end_s: +m[2] }));
 async function readExport(file) {
   const wb = new ExcelJS.Workbook();
   try { await wb.xlsx.load(await file.arrayBuffer()); } catch (e) { throw new Error(`${file.name}: 엑셀 파일을 열 수 없습니다`); }
   const L = wb.getWorksheet("라벨 결과"), Au = wb.getWorksheet("작업 이력");
   if (!L || !Au) throw new Error(`${file.name}: Beep Labeler에서 내보낸 엑셀이 아닙니다 ('라벨 결과'/'작업 이력' 시트 없음)`);
   const [head, rows] = sheetRows(L);
-  for (const need of ["파일", "작업자 ID", "상태", "비프 여부", "시작(초)", "끝(초)"]) if (!head.includes(need)) throw new Error(`${file.name}: '라벨 결과' 시트에 '${need}' 열이 없습니다`);
+  for (const need of ["파일", "작업자 ID", "상태", "비프 여부"]) if (!head.includes(need)) throw new Error(`${file.name}: '라벨 결과' 시트에 '${need}' 열이 없습니다`);
   const labels = [];
   for (const r of rows) {
     const l = {};
     LABEL_HEADERS.forEach((h, j) => { const k = LABEL_KEYS[j]; if (k) l[k] = NUMERIC.has(k) ? cellNum(r[h]) : cellText(r[h]); });
     if (!l.file || !l.user_id) continue;
     l.display_name = l.display_name || l.user_id; l.reviewed = l.status === "검수 완료"; l.has_beep = cellText(r["비프 여부"]) === "있음";
-    if (l.has_beep && (l.start_s == null || l.end_s == null)) throw new Error(`${file.name}: ${l.file} / ${l.user_id} 의 시작·끝 초가 비어 있습니다`);
-    if (l.has_beep) { l.region = regionText(l.start_s, l.end_s); l.duration_ms = l.duration_ms ?? Math.round((l.end_s - l.start_s) * 1000); }
-    else l.region = "비프 없음";
+    l.status = l.status || (l.reviewed ? "검수 완료" : "작업 중");
+    l.regions = parseRegions(cellText(r["구간 목록"]) || cellText(r["비프 구간"]));
+    if (l.has_beep && !l.regions.length) { const s = cellNum(r["시작(초)"]), e = cellNum(r["끝(초)"]); if (s == null || e == null) throw new Error(`${file.name}: ${l.file} / ${l.user_id} 의 구간이 비어 있습니다`); l.regions = [{ start_s: s, end_s: e }]; }
+    l.n_regions = l.regions.length; l.region = l.regions.length ? regionsText(l.regions) : "비프 없음";
+    l.start_s = l.regions[0]?.start_s ?? null; l.end_s = l.regions[l.regions.length - 1]?.end_s ?? null;
+    l.total_ms = l.total_ms ?? (l.regions.length ? l.regions.reduce((s, x) => s + Math.round((x.end_s - x.start_s) * 1000), 0) : null);
+    l.duration_ms = l.total_ms;
     l.source = cellText(r[SOURCE]) || file.name; labels.push(l);
   }
   const [, arows] = sheetRows(Au);
@@ -1198,7 +1606,7 @@ async function mergeExports(exps) {
       const k = l.file + "\u0001" + l.user_id, o = best.get(k);
       if (!o) { best.set(k, l); continue; }
       rep.duplicates++;
-      const same = o.has_beep === l.has_beep && o.start_s === l.start_s && o.end_s === l.end_s && o.memo === l.memo && o.status === l.status, newer = l.updated_at > o.updated_at;
+      const same = o.region === l.region && o.memo === l.memo && o.status === l.status, newer = l.updated_at > o.updated_at;
       if (!same) { const [kp, dp] = newer ? [l, o] : [o, l]; rep.conflicts.push(`${l.file} / ${l.user_id}: '${kp.source}'(${kp.updated_at}, ${kp.region}) 사용, '${dp.source}'(${dp.updated_at}, ${dp.region}) 제외`); }
       if (newer) best.set(k, l);
     }
@@ -1210,16 +1618,16 @@ async function mergeExports(exps) {
   for (const ex of exps) for (const a of ex.audit) { const k = [a.ts, a.user_id, a.file, a.action, a.before, a.after, a.detail].join("\u0001"); if (!seen.has(k)) { seen.add(k); audit.push(a); } }
   audit.sort((a, b) => (a.ts === b.ts ? (a.user_id < b.user_id ? -1 : 1) : a.ts < b.ts ? -1 : 1));
   const users = {};
-  for (const l of labels) users[l.user_id] ||= { display_name: l.display_name, created_at: "", last_login: "" };
-  for (const a of audit) { if (!a.user_id) continue; const u = (users[a.user_id] ||= { display_name: a.display_name || a.user_id, created_at: "", last_login: "" }); if (a.action === "아이디 생성" && (!u.created_at || a.ts < u.created_at)) u.created_at = a.ts; if (a.action === "로그인" && a.ts > u.last_login) u.last_login = a.ts; }
+  for (const l of labels) users[l.user_id] ||= { display_name: l.display_name };
+  for (const a of audit) if (a.user_id) users[a.user_id] ||= { display_name: a.display_name || a.user_id };
   const sortedUsers = Object.fromEntries(Object.entries(users).sort());
-  const files = new Map(); for (const l of labels) if (!files.has(l.file)) files.set(l.file, l.file_duration_s);
-  const fileList = [...files].sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  const fmap = new Map(); for (const l of labels) if (!fmap.has(l.file)) fmap.set(l.file, { rel: l.file, no: l.no ?? null, dur: l.file_duration_s, assignee: null, doc: null });
+  const files = [...fmap.values()].sort((a, b) => (a.no ?? 1e9) - (b.no ?? 1e9) || (a.rel < b.rel ? -1 : 1));
   const info = [["합친 일시", now()], ["툴 버전", VERSION], ["합친 파일", rep.sources.join("\n")], ["중복 라벨", `${rep.duplicates}개 (같은 파일·같은 작업자 → 최종 수정 일시가 가장 늦은 것 사용)`],
     ["내용이 다른 중복", rep.conflicts.join("\n") || "없음"], ["오디오 불일치 경고", rep.sha.length ? "같은 파일 이름인데 사람마다 오디오 내용(SHA-256)이 다름: " + rep.sha.join(", ") : "없음"],
-    ...RULE_ROWS, ["파일 수", fileList.length], ["라벨 수(작업자×파일)", labels.length], ["작업자 수", Object.keys(sortedUsers).length], ["작업 이력 수", audit.length], SHEET_HELP];
-  const blob = await writeWorkbook({ labels, audit, users: sortedUsers, files: fileList }, "Beep Labeler 합친 결과", info, true);
-  return { blob, rep, n: { labels: labels.length, audit: audit.length, users: Object.keys(sortedUsers), files: fileList.length } };
+    ...RULE_ROWS, ["파일 수", files.length], ["라벨 수(작업자×파일)", labels.length], ["작업자 수", Object.keys(sortedUsers).length], ["작업 이력 수", audit.length], SHEET_HELP];
+  const blob = await writeWorkbook({ project: false, labels, audit, users: sortedUsers, files }, "Beep Labeler 합친 결과", info, true);
+  return { blob, rep, n: { labels: labels.length, audit: audit.length, users: Object.keys(sortedUsers), files: files.length } };
 }
 $("merge-files").onchange = () => { const n = $("merge-files").files.length; $("merge-run").disabled = !n; $("merge-result").textContent = n ? `${n}개 선택됨: ${[...$("merge-files").files].map((f) => f.name).join(", ")}` : ""; };
 $("merge-run").onclick = async () => {
@@ -1240,7 +1648,14 @@ $("merge-run").onclick = async () => {
 };
 
 /* ============================== backup, import, reset, password ============================== */
-$("btn-backup").onclick = () => { $("backup-result").textContent = ""; $("rs-file").disabled = !S.view; $("rs-folder").disabled = !S.folder; $("dlg-backup").showModal(); };
+$("btn-backup").onclick = () => {
+  $("backup-result").textContent = "";
+  const proj = WS.kind === "project", owner = proj && WS.proj?.owner === S.me.id;
+  $("rs-file").disabled = !S.view; $("rs-folder").disabled = !S.folder || (proj && !owner);
+  $("rs-note").innerHTML = proj ? `공동 작업 '${esc(WS.proj?.name || "")}'의 <b>비프 구간 · 메모 · 상태 · 저장 기록</b>을 지웁니다. <b>모든 참여자에게 적용됩니다.</b> 폴더 전체 초기화는 방장만 할 수 있습니다. 되돌릴 수 없습니다.`
+    : "폴더에서 처음 가져왔을 때처럼 <b>비프 구간 · 메모 · 상태 · 저장 기록</b>을 모두 지웁니다. 원본 WAV 파일은 바뀌지 않습니다. 되돌릴 수 없습니다.";
+  $("dlg-backup").showModal();
+};
 $("bk-save").onclick = async () => {
   try {
     const fsn = await retry(() => DB.collection(`ws/${S.me.id}/folders`).get()), files = [];
@@ -1255,20 +1670,21 @@ $("bk-save").onclick = async () => {
 };
 function legacyToFiles(d) {   // v0.5–0.7 browser backups / IndexedDB: labels + flat audit rows
   const by = new Map(), events = [], key = (ds, f) => ds + "\u0001" + f;
-  for (const l of d.labels || []) { const { key: _k, ...rest } = l; rest.status = rest.status || (rest.reviewed ? "reviewed" : "draft"); by.set(key(l.dataset, l.file), { file: l.file, dataset: l.dataset, label: rest, history: [] }); }
+  for (const l of d.labels || []) { const { key: _k, ...rest } = l; by.set(key(l.dataset, l.file), { file: l.file, dataset: l.dataset, label: normLabel(rest), history: [] }); }
   for (const a of d.audit || []) {
-    const h = { id: "L" + a.id, ts: a.ts, action: a.action, before: a.before ?? null, after: a.after ?? null, detail: a.detail ?? null };
+    const h = { id: "L" + a.id, ts: a.ts, action: a.action, before: a.before ?? null, after: a.after ?? null, detail: a.detail ?? null, user_id: a.user_id };
     if (a.file && a.dataset != null) { const k = key(a.dataset, a.file); if (!by.has(k)) by.set(k, { file: a.file, dataset: a.dataset, label: null, history: [] }); by.get(k).history.push(h); }
     else events.push({ ...h, dataset: a.dataset ?? null, file: null });
   }
   return { files: [...by.values()], events };
 }
+/** Imports into the PERSONAL work space (backups and old browser data are personal). */
 async function importRecords(d) {
   const { files, events } = d.format === 2 ? { files: d.files || [], events: d.events || [] } : legacyToFiles(d);
   const folders = new Set(); let n = 0;
   for (const f of files) {
     if (!f || !f.file || f.dataset == null) continue;
-    const ref = await fileRef(S.me.id, f.dataset, f.file), sn = await retry(() => ref.get()), c = sn.exists ? plain(sn.data()) : null;
+    const ref = (await folderRef(S.me.id, f.dataset)).collection("files").doc(await keyOf("file:" + f.file)), sn = await retry(() => ref.get()), c = sn.exists ? plain(sn.data()) : null;
     const newer = f.label && (!c?.label || (f.label.updated_at || "") > (c.label.updated_at || ""));
     const label = newer ? { ...f.label, user_id: S.me.id } : c?.label ?? null;
     const seen = new Set((c?.history || []).map((h) => h.id));
@@ -1280,7 +1696,7 @@ async function importRecords(d) {
   const seenE = new Set((S.me.events || []).map((e) => e.id));
   S.me.events = [...(S.me.events || []), ...events.filter((e) => !seenE.has(e.id))].sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0)).slice(-MAX_EVENTS);
   await putUser(S.me);
-  if (S.folder) { await reloadMyLabels(); renderFiles(); if (S.idx >= 0) openFile(S.idx, true); }
+  if (S.folder && WS.kind === "personal") { await reloadMyLabels(); renderFiles(); if (S.idx >= 0) openFile(S.idx, true); }
   return n;
 }
 $("bk-file").onchange = async () => {
@@ -1290,7 +1706,7 @@ $("bk-file").onchange = async () => {
     if (d.app !== "beeplabel-web" || !d.user) throw new Error("Beep Labeler 백업 파일이 아닙니다");
     if (d.user.id !== S.me.id && (await ask("다른 아이디의 백업", `이 백업은 '${d.user.id}' 아이디의 기록입니다. 지금 아이디(${S.me.id})로 가져올까요?`, "가져오기")) !== "yes") return;
     $("backup-result").textContent = "가져오는 중…";
-    $("backup-result").textContent = `불러오기 완료: 파일 ${await importRecords(d)}개의 라벨·기록을 가져왔습니다.`;
+    $("backup-result").textContent = `불러오기 완료: 파일 ${await importRecords(d)}개의 라벨·기록을 개인 작업으로 가져왔습니다.`;
   } catch (e) { $("backup-result").textContent = "불러오기 실패: " + (e?.code ? dbMsg(e) : e.message); }
 };
 /** Records this browser kept locally before online storage (IndexedDB "beeplabel"). Never creates or deletes it. */
@@ -1318,7 +1734,7 @@ $("bk-legacy").onclick = async () => {
     const ids = [...new Set([...old.labels, ...old.audit].map((x) => x.user_id))].join(", ");
     $("backup-result").textContent = `이 브라우저의 예전 기록은 '${ids}' 아이디의 것입니다. 그 아이디로 로그인해서 가져오세요.`; return;
   }
-  if ((await ask("예전 기록 가져오기", `이 브라우저에 있던 '${S.me.id}' 아이디의 라벨 ${mine.labels.length}개, 기록 ${mine.audit.length}개를 온라인 저장소로 옮길까요?\n(이미 온라인에 있는 기록은 그대로 두고 합칩니다)`, "가져오기")) !== "yes") return;
+  if ((await ask("예전 기록 가져오기", `이 브라우저에 있던 '${S.me.id}' 아이디의 라벨 ${mine.labels.length}개, 기록 ${mine.audit.length}개를 온라인 개인 작업으로 옮길까요?\n(이미 온라인에 있는 기록은 그대로 두고 합칩니다)`, "가져오기")) !== "yes") return;
   try {
     $("backup-result").textContent = "가져오는 중…";
     const n = await importRecords(mine);
@@ -1329,24 +1745,26 @@ $("bk-legacy").onclick = async () => {
 /** Reset to the state right after the folder was loaded: labels and saved history go away. */
 async function resetFiles(rels) {
   const set = new Set(rels);
-  try { for (const rel of rels) if (fileDocs.has(rel)) await retry(async () => (await fileRef(S.me.id, S.folder, rel)).delete()); }
+  try { for (const rel of rels) if (fileDocs.has(rel)) { await retry(async () => (await fileRefW(rel)).delete()); fileDocs.delete(rel); myLabels.delete(rel); } }
   catch (e) { $("backup-result").textContent = "초기화 실패: " + dbMsg(e); return false; }
-  await log(S.me.id, "초기화", { dataset: S.folder, detail: rels.length === 1 ? rels[0] : `폴더 전체 ${rels.length}개 파일` });
-  await reloadMyLabels(); renderFiles();
+  const what = rels.length === 1 ? rels[0] : `폴더 전체 ${rels.length}개 파일`;
+  if (WS.kind === "project") await projLog("초기화", what); else await log(S.me.id, "초기화", { dataset: S.folder, detail: what });
+  await reloadMyLabels(); renderFiles(); renderProjPanel();
   if (S.view && set.has(S.files[S.idx].rel)) { applySaved(null); S.undo = []; S.redo = []; refreshPanels(); draw(); setSave("처음 상태로 초기화했습니다"); loadHistory(); }
   return true;
 }
 $("rs-file").onclick = async () => {
   if (!S.view) return;
-  const rel = S.files[S.idx].rel;
-  if ((await ask("이 파일 초기화", `${rel}\n비프 구간 · 메모 · 상태 · 저장 기록을 모두 지우고 처음 상태로 되돌립니다.\n되돌릴 수 없습니다.`, "초기화")) !== "yes") return;
+  const rel = S.files[S.idx].rel, all = WS.kind === "project" ? "\n공동 작업이라 모든 참여자에게 적용됩니다." : "";
+  if ((await ask("이 파일 초기화", `${rel}\n비프 구간 · 메모 · 상태 · 저장 기록을 모두 지우고 처음 상태로 되돌립니다.${all}\n되돌릴 수 없습니다.`, "초기화")) !== "yes") return;
   if (await resetFiles([rel])) $("backup-result").textContent = `${rel} 을(를) 처음 상태로 되돌렸습니다.`;
 };
 $("rs-folder").onclick = async () => {
   if (!S.folder) return;
-  const rels = [...new Set([...S.files.map((f) => f.rel), ...fileDocs.keys()])];
-  if ((await ask("폴더 전체 초기화", `${S.folder} 폴더의 파일 ${S.files.length}개에 대해\n비프 구간 · 메모 · 상태 · 저장 기록을 모두 지웁니다.\n되돌릴 수 없으니 필요하면 먼저 백업하세요.`, "전체 초기화")) !== "yes") return;
-  if (await resetFiles(rels)) $("backup-result").textContent = `${S.folder} 폴더 전체를 처음 상태로 되돌렸습니다.`;
+  if (WS.kind === "project" && WS.proj?.owner !== S.me.id) { $("backup-result").textContent = "공동 작업 전체 초기화는 방장만 할 수 있습니다."; return; }
+  const rels = [...new Set([...S.files.map((f) => f.rel), ...fileDocs.keys()])], all = WS.kind === "project" ? "\n공동 작업이라 모든 참여자의 작업이 지워집니다." : "";
+  if ((await ask("폴더 전체 초기화", `${WS.kind === "project" ? WS.proj?.name : S.folder}의 파일 ${rels.length}개에 대해\n비프 구간 · 메모 · 상태 · 저장 기록을 모두 지웁니다.${all}\n되돌릴 수 없으니 필요하면 먼저 엑셀로 내보내 두세요.`, "전체 초기화")) !== "yes") return;
+  if (await resetFiles(rels)) $("backup-result").textContent = "전체를 처음 상태로 되돌렸습니다.";
 };
 $("pw-save").onclick = async () => {
   const o = $("pw-old").value, n1 = $("pw-new").value, n2 = $("pw-new2").value, msg = (m) => ($("backup-result").textContent = m);
@@ -1368,7 +1786,7 @@ async function boot(db) {
   $("lg-db").textContent = ""; $("lg-submit").disabled = false;
   let sid = null; try { sid = sessionStorage.getItem("bl-session"); } catch (e) {}
   const u = sid ? await getUser(sid).catch(() => null) : null;
-  if (u) { S.me = u; startApp(u); } else showLogin();
+  if (u) startApp(u); else showLogin();
 }
 $("lg-db").textContent = "온라인 저장소에 연결하는 중…"; $("lg-submit").disabled = true;
 (async () => { boot(window.claude?.use ? await window.claude.use("db").catch(() => null) : null); })();
